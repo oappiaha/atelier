@@ -1,0 +1,23 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.pytest_cache/
+.ruff_cache/
+
+# node
+node_modules/
+dist/
+dev-dist/
+*.local
+
+# tooling
+.DS_Store
+.idea/
+.vscode/
+*.log
+
+# local data
+.minio-data/
+.pg-data/

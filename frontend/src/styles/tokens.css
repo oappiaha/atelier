@@ -1,0 +1,156 @@
+/* Lifted from atelier_light_v3.html — the visual spec (PRD §5, TDD §10.4). */
+:root{
+  /* ═══ AZURE — white / cool blue. Canvas recedes; product photography
+     is the only warmth on screen. Shadows carry a faint blue so the
+     whole surface reads as glass and steel rather than paper. ═══ */
+  --bg:#EFF3F9; --bg-deep:#E2E9F2; --card:#FFFFFF;
+  --ink:#151A22; --fog:#5F6B7D; --faint:#9AA6B6;
+  --stroke:rgba(21,26,34,0.07); --stroke-strong:rgba(21,26,34,0.13);
+  --accent:#0A84FF; --accent-soft:#E4EFFE; --accent-line:rgba(10,132,255,0.38);
+  --ok:#1B7F52; --warn:#B26A00;
+  --shadow-tint:rgba(21,40,74,0.11);
+  --s1:0 1px 3px rgba(21,40,74,0.08);
+  --s2:0 8px 24px -6px rgba(21,40,74,0.13);
+  --s3:0 20px 50px -12px rgba(21,40,74,0.18);
+  --ease:cubic-bezier(0.32,0.72,0,1);
+  --spring:cubic-bezier(0.34,1.56,0.64,1);
+
+  /* ═══ TACTILE KEY SYSTEM — the physics of a physical button ═══ */
+  --key-face:linear-gradient(180deg,#FFFFFF 0%,#FBFCFE 45%,#EFF3F9 100%);
+  --key-face-hi:linear-gradient(180deg,#FFFFFF 0%,#FFFFFF 45%,#F5F8FC 100%);
+  --key-dark:linear-gradient(180deg,#2C3542 0%,#1E2530 55%,#151A22 100%);
+  --key-rim:rgba(21,34,56,.13);      /* the key's vertical side wall */
+  --key-rim-dark:#0F131A;
+  --key-lip:rgba(255,255,255,1);     /* specular on the top bevel */
+  --key-cast:rgba(21,40,74,.16);     /* shadow cast into the housing */
+  --travel:3px;
+  --down:70ms cubic-bezier(.2,0,0,1);          /* strike: fast, mechanical */
+  --up:420ms cubic-bezier(.34,1.56,.64,1);     /* release: springy */
+
+  /* raised key */
+  --sh-up:0 2px 0 0 var(--key-rim), 0 4px 8px -2px var(--key-cast),
+          inset 0 1px 0 0 var(--key-lip), inset 0 -1px 2px 0 rgba(21,40,74,.05);
+  /* struck key (below the surface) */
+  --sh-down:0 0 0 0 var(--key-rim), 0 1px 2px 0 rgba(21,40,74,.1),
+            inset 0 1px 3px 0 rgba(21,40,74,.16), inset 0 -1px 0 0 rgba(255,255,255,.6);
+  /* latched dark key */
+  --sh-latch:0 0 0 0 var(--key-rim-dark), 0 1px 3px 0 rgba(21,40,74,.3),
+             inset 0 1px 0 0 rgba(255,255,255,.14), inset 0 3px 6px -2px rgba(0,0,0,.5);
+  /* the well a key sits in */
+  --sh-well:inset 0 2px 4px 0 rgba(21,40,74,.13), inset 0 -1px 0 0 rgba(255,255,255,.9),
+            0 1px 0 0 rgba(255,255,255,.7);
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{background:var(--bg);color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;width:100%;max-width:100%;}
+
+/* ═══ CONTAINMENT ═══
+   Grid/flex children default to min-width:auto and refuse to shrink below
+   their content width. A horizontally-scrolling chips row inside a grid
+   column therefore widens the whole page. min-width:0 lets them shrink.
+   (TDD §10.3 — this cost an hour in the mock; do not pay it twice.) */
+.shell,.main,.view,.content,
+.detail-grid,.detail-grid>*,
+.studio-grid,.studio-grid>*,
+.proj-row,.proj-row>*,
+.dgrid,.dgrid>*,
+.hdr,.hdr>*,
+.detail-hero,.sg-rail,.sg-pal,.sg-canvas,
+.media-wrap,.panel,.tl,.tl-item,.tl-card,.tl-head{min-width:0;max-width:100%;}
+.chips,.rail,.pal-rail,.seg{width:100%;max-width:100%;}
+.seg{width:fit-content;}
+.syne{font-family:'Syne',sans-serif;letter-spacing:-0.02em;}
+.mono{font-family:'DM Mono',monospace;}
+button{font-family:inherit;border:none;background:none;color:inherit;cursor:pointer;}
+input,textarea{font-family:inherit;}
+
+/* ── shell ── */
+.shell{min-height:100dvh;display:flex;width:100%;}
+.sidebar{display:none;}
+.main{flex:1;min-width:0;position:relative;overflow-x:hidden;}
+.view{min-height:100dvh;padding-bottom:118px;}
+@media(min-width:900px){
+  .sidebar{display:flex;flex-direction:column;width:228px;flex-shrink:0;padding:28px 18px;
+    position:sticky;top:0;height:100dvh;border-right:1px solid var(--stroke);}
+  .side-nav{display:flex;flex-direction:column;gap:4px;margin-top:34px;}
+  .snav{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:14px;color:var(--fog);font-size:14px;
+    transition:all .3s var(--ease);position:relative;overflow:hidden;}
+  .snav.on{background:var(--card);color:var(--ink);box-shadow:var(--s1);font-weight:500;}
+  .snav:hover:not(.on){background:rgba(255,255,255,.55);transform:translateX(2px);}
+  .tabbar{display:none!important;}
+  .content{max-width:1120px;margin:0 auto;padding:0 40px;}
+  .view{padding-bottom:60px;}
+}
+@media(max-width:899px){ .content{padding:0 16px;} }
+
+/* ── tabbar ── */
+.tabbar{position:fixed;left:12px;right:12px;bottom:max(env(safe-area-inset-bottom),12px);z-index:120;
+  border-radius:26px;padding:6px;display:flex;align-items:center;justify-content:space-between;
+  background:rgba(250,252,255,.86);border:1px solid var(--stroke);
+  backdrop-filter:blur(30px) saturate(170%);-webkit-backdrop-filter:blur(30px) saturate(170%);box-shadow:var(--s3);}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;color:var(--faint);
+  transition:color .3s var(--ease);position:relative;}
+.tab.on{color:var(--ink);}
+.tab svg{transition:transform .4s var(--spring);}
+.tab.on svg{transform:translateY(-1px) scale(1.08);}
+.tab-label{font-family:'DM Mono';font-size:8px;letter-spacing:.14em;text-transform:uppercase;}
+.tab::after{content:'';position:absolute;bottom:2px;width:3px;height:3px;border-radius:50%;background:var(--ink);
+  opacity:0;transform:scale(0);transition:all .35s var(--spring);}
+.tab.on::after{opacity:1;transform:scale(1);}
+.fab{width:48px;height:48px;border-radius:50%;background:var(--ink);color:#FFF;display:flex;align-items:center;justify-content:center;
+  margin:0 3px;box-shadow:0 10px 26px rgba(21,40,74,.3);flex-shrink:0;transition:transform .35s var(--spring);}
+.fab:active{transform:scale(.9) rotate(90deg);}
+
+/* ── atoms ── */
+.press{transition:transform .3s var(--spring);cursor:pointer;}
+.press:active{transform:scale(.965);}
+.eyebrow{font-family:'DM Mono';font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);}
+.glassbtn{display:flex;align-items:center;justify-content:center;border-radius:14px;background:rgba(255,255,255,.72);
+  border:1px solid var(--stroke);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:var(--s1);
+  transition:transform .3s var(--spring),box-shadow .3s ease;}
+.glassbtn:hover{box-shadow:var(--s2);}
+.glassbtn:active{transform:scale(.92);}
+.chips{display:flex;gap:7px;overflow-x:auto;padding:4px 0;scrollbar-width:none;max-width:100%;
+  -webkit-overflow-scrolling:touch;}
+.chips::-webkit-scrollbar{display:none;}
+.chip{flex-shrink:0;padding:8px 14px;border-radius:999px;font-family:'DM Mono';font-size:10.5px;
+  color:var(--fog);border:1px solid var(--stroke-strong);background:transparent;
+  transition:background .3s var(--ease),color .3s var(--ease),border-color .3s var(--ease),transform .3s var(--spring);}
+.chip:active{transform:scale(.94);}
+.chip.on{background:var(--ink);color:#FFF;border-color:var(--ink);}
+.seg{display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--bg-deep);border:1px solid var(--stroke);
+  width:fit-content;max-width:100%;overflow-x:auto;scrollbar-width:none;}
+.seg::-webkit-scrollbar{display:none;}
+.seg button{padding:8px 14px;border-radius:999px;font-family:'DM Mono';font-size:10px;letter-spacing:.08em;
+  color:var(--fog);white-space:nowrap;transition:all .32s var(--ease);}
+.seg button.on{background:var(--ink);color:#FFF;box-shadow:var(--s1);}
+.hdr{padding:max(env(safe-area-inset-top),18px) 0 14px;display:flex;align-items:flex-end;justify-content:space-between;
+  flex-wrap:wrap;gap:12px;width:100%;}
+.hdr .syne{overflow-wrap:anywhere;}
+@media(min-width:900px){.hdr{padding-top:42px;}}
+@media(max-width:899px){
+  .hdr .seg{width:100%;justify-content:flex-start;}
+  .hdr .seg button{flex:1;text-align:center;padding:8px 6px;font-size:9.5px;}
+}
+
+/* ── entrance system — fires on MOUNT ONLY, never on state change ── */
+@keyframes riseIn{from{opacity:0;transform:translateY(16px) scale(.985);}to{opacity:1;transform:none;}}
+.rise{animation:riseIn .6s var(--ease) both;}
+.reveal{opacity:0;transform:translateY(20px) scale(.98);
+  transition:opacity .7s var(--ease),transform .7s var(--ease);}
+.reveal.in{opacity:1;transform:none;}
+
+/* ── big keys / buttons shared across views ── */
+.gen-btn{width:100%;border-radius:16px;padding:14px;background:var(--ink);color:#FFF;display:flex;align-items:center;
+  justify-content:space-between;box-shadow:0 12px 28px rgba(21,40,74,.24);
+  transition:transform .35s var(--spring),box-shadow .3s ease;position:relative;overflow:hidden;}
+.primary-btn{width:100%;border-radius:14px;padding:13px;background:var(--ink);color:#FFF;font-size:13px;font-weight:500;
+  margin-top:12px;transition:transform .35s var(--spring);}
+.primary-btn:active{transform:scale(.98);}
+.panel{background:var(--card);border:1px solid var(--stroke);border-radius:22px;box-shadow:var(--s1);}
+
+/* ── toast ── */
+.toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(18px);z-index:600;
+  padding:10px 17px;border-radius:999px;font-family:'DM Mono';font-size:10.5px;background:var(--ink);color:#FFF;
+  opacity:0;transition:all .45s var(--spring);pointer-events:none;box-shadow:var(--s3);max-width:86vw;text-align:center;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}

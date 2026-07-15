@@ -1,0 +1,1735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#EFF3F9">
+<title>Atelier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;600;700;800&family=DM+Mono:wght@300;400;500&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ═══ AZURE — white / cool blue. Canvas recedes; product photography
+       is the only warmth on screen. Shadows carry a faint blue so the
+       whole surface reads as glass and steel rather than paper. ═══ */
+    --bg:#EFF3F9; --bg-deep:#E2E9F2; --card:#FFFFFF;
+    --ink:#151A22; --fog:#5F6B7D; --faint:#9AA6B6;
+    --stroke:rgba(21,26,34,0.07); --stroke-strong:rgba(21,26,34,0.13);
+    --accent:#0A84FF; --accent-soft:#E4EFFE; --accent-line:rgba(10,132,255,0.38);
+    --ok:#1B7F52; --warn:#B26A00;
+    /* legacy aliases kept so existing rules resolve */
+    --champagne:#0A84FF; --champagne-soft:#4BA5FF; --indigo:#0A84FF; --teal:#1B7F52;
+    --shadow-tint:rgba(21,40,74,0.11);
+    --s1:0 1px 3px rgba(21,40,74,0.08);
+    --s2:0 8px 24px -6px rgba(21,40,74,0.13);
+    --s3:0 20px 50px -12px rgba(21,40,74,0.18);
+    --ease:cubic-bezier(0.32,0.72,0,1);
+    --spring:cubic-bezier(0.34,1.56,0.64,1);
+
+    /* ═══ TACTILE KEY SYSTEM — the physics of a physical button ═══ */
+    --key-face:linear-gradient(180deg,#FFFFFF 0%,#FBFCFE 45%,#EFF3F9 100%);
+    --key-face-hi:linear-gradient(180deg,#FFFFFF 0%,#FFFFFF 45%,#F5F8FC 100%);
+    --key-dark:linear-gradient(180deg,#2C3542 0%,#1E2530 55%,#151A22 100%);
+    --key-rim:rgba(21,34,56,.13);      /* the key's vertical side wall */
+    --key-rim-dark:#0F131A;
+    --key-lip:rgba(255,255,255,1);   /* specular on the top bevel */
+    --key-cast:rgba(21,40,74,.16);     /* shadow cast into the housing */
+    --travel:3px;
+    --down:70ms cubic-bezier(.2,0,0,1);          /* strike: fast, mechanical */
+    --up:420ms cubic-bezier(.34,1.56,.64,1);     /* release: springy */
+
+    /* raised key */
+    --sh-up:0 2px 0 0 var(--key-rim), 0 4px 8px -2px var(--key-cast),
+            inset 0 1px 0 0 var(--key-lip), inset 0 -1px 2px 0 rgba(21,40,74,.05);
+    /* struck key (below the surface) */
+    --sh-down:0 0 0 0 var(--key-rim), 0 1px 2px 0 rgba(21,40,74,.1),
+              inset 0 1px 3px 0 rgba(21,40,74,.16), inset 0 -1px 0 0 rgba(255,255,255,.6);
+    /* latched dark key */
+    --sh-latch:0 0 0 0 var(--key-rim-dark), 0 1px 3px 0 rgba(21,40,74,.3),
+               inset 0 1px 0 0 rgba(255,255,255,.14), inset 0 3px 6px -2px rgba(0,0,0,.5);
+    /* the well a key sits in */
+    --sh-well:inset 0 2px 4px 0 rgba(21,40,74,.13), inset 0 -1px 0 0 rgba(255,255,255,.9),
+              0 1px 0 0 rgba(255,255,255,.7);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{background:var(--bg);color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden;width:100%;max-width:100%;}
+
+  /* ═══ CONTAINMENT — the fix ═══
+     Grid/flex children default to min-width:auto and refuse to shrink below
+     their content width. A horizontally-scrolling chips row inside a grid
+     column therefore widens the whole page. min-width:0 lets them shrink. */
+  .shell,.main,.view,.content,
+  .detail-grid,.detail-grid>*,
+  .studio-grid,.studio-grid>*,
+  .proj-row,.proj-row>*,
+  .dgrid,.dgrid>*,
+  .hdr,.hdr>*,
+  .detail-hero,.sg-rail,.sg-pal,.sg-canvas,
+  .media-wrap,.panel,.tl,.tl-item,.tl-card,.tl-head{min-width:0;max-width:100%;}
+  .chips,.rail,.pal-rail,.seg{width:100%;max-width:100%;}
+  .seg{width:fit-content;}
+  .syne{font-family:'Syne',sans-serif;letter-spacing:-0.02em;}
+  .mono{font-family:'DM Mono',monospace;}
+  button{font-family:inherit;border:none;background:none;color:inherit;cursor:pointer;}
+  input,textarea{font-family:inherit;}
+
+  /* ── shell ── */
+  .shell{min-height:100dvh;display:flex;width:100%;}
+  .sidebar{display:none;}
+  .main{flex:1;min-width:0;position:relative;overflow-x:hidden;}
+  .view{display:none;min-height:100dvh;padding-bottom:118px;}
+  .view.active{display:block;}
+  @media(min-width:900px){
+    .sidebar{display:flex;flex-direction:column;width:228px;flex-shrink:0;padding:28px 18px;
+      position:sticky;top:0;height:100dvh;border-right:1px solid var(--stroke);}
+    .side-nav{display:flex;flex-direction:column;gap:4px;margin-top:34px;}
+    .snav{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:14px;color:var(--fog);font-size:14px;
+      transition:all .3s var(--ease);position:relative;overflow:hidden;}
+    .snav.on{background:var(--card);color:var(--ink);box-shadow:var(--s1);font-weight:500;}
+    .snav:hover:not(.on){background:rgba(255,255,255,.55);transform:translateX(2px);}
+    .tabbar{display:none!important;}
+    .content{max-width:1120px;margin:0 auto;padding:0 40px;}
+    .view{padding-bottom:60px;}
+  }
+  @media(max-width:899px){ .content{padding:0 16px;} }
+
+  /* ── tabbar ── */
+  .tabbar{position:fixed;left:12px;right:12px;bottom:max(env(safe-area-inset-bottom),12px);z-index:120;
+    border-radius:26px;padding:6px;display:flex;align-items:center;justify-content:space-between;
+    background:rgba(250,252,255,.86);border:1px solid var(--stroke);
+    backdrop-filter:blur(30px) saturate(170%);-webkit-backdrop-filter:blur(30px) saturate(170%);box-shadow:var(--s3);}
+  .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;color:var(--faint);
+    transition:color .3s var(--ease);position:relative;}
+  .tab.on{color:var(--ink);}
+  .tab svg{transition:transform .4s var(--spring);}
+  .tab.on svg{transform:translateY(-1px) scale(1.08);}
+  .tab-label{font-family:'DM Mono';font-size:8px;letter-spacing:.14em;text-transform:uppercase;}
+  .tab::after{content:'';position:absolute;bottom:2px;width:3px;height:3px;border-radius:50%;background:var(--ink);
+    opacity:0;transform:scale(0);transition:all .35s var(--spring);}
+  .tab.on::after{opacity:1;transform:scale(1);}
+  .fab{width:48px;height:48px;border-radius:50%;background:var(--ink);color:#FFF;display:flex;align-items:center;justify-content:center;
+    margin:0 3px;box-shadow:0 10px 26px rgba(21,40,74,.3);flex-shrink:0;transition:transform .35s var(--spring);}
+  .fab:active{transform:scale(.9) rotate(90deg);}
+
+  /* ── atoms ── */
+  .press{transition:transform .3s var(--spring);cursor:pointer;}
+  .press:active{transform:scale(.965);}
+  .eyebrow{font-family:'DM Mono';font-size:9.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--faint);}
+  .glassbtn{display:flex;align-items:center;justify-content:center;border-radius:14px;background:rgba(255,255,255,.72);
+    border:1px solid var(--stroke);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:var(--s1);
+    transition:transform .3s var(--spring),box-shadow .3s ease;}
+  .glassbtn:hover{box-shadow:var(--s2);}
+  .glassbtn:active{transform:scale(.92);}
+  .chips{display:flex;gap:7px;overflow-x:auto;padding:4px 0;scrollbar-width:none;max-width:100%;
+    -webkit-overflow-scrolling:touch;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{flex-shrink:0;padding:8px 14px;border-radius:999px;font-family:'DM Mono';font-size:10.5px;
+    color:var(--fog);border:1px solid var(--stroke-strong);background:transparent;
+    transition:background .3s var(--ease),color .3s var(--ease),border-color .3s var(--ease),transform .3s var(--spring);}
+  .chip:active{transform:scale(.94);}
+  .chip.on{background:var(--ink);color:#FFF;border-color:var(--ink);}
+  .seg{display:flex;gap:4px;padding:4px;border-radius:999px;background:var(--bg-deep);border:1px solid var(--stroke);
+    width:fit-content;max-width:100%;overflow-x:auto;scrollbar-width:none;}
+  .seg::-webkit-scrollbar{display:none;}
+  .seg button{padding:8px 14px;border-radius:999px;font-family:'DM Mono';font-size:10px;letter-spacing:.08em;
+    color:var(--fog);white-space:nowrap;transition:all .32s var(--ease);}
+  .seg button.on{background:var(--ink);color:#FFF;box-shadow:var(--s1);}
+  .hdr{padding:max(env(safe-area-inset-top),18px) 0 14px;display:flex;align-items:flex-end;justify-content:space-between;
+    flex-wrap:wrap;gap:12px;width:100%;}
+  .hdr .syne{overflow-wrap:anywhere;}
+  @media(min-width:900px){.hdr{padding-top:42px;}}
+  /* studio step chips must not stretch the header on phones */
+  @media(max-width:899px){
+    .hdr .seg{width:100%;justify-content:flex-start;}
+    .hdr .seg button{flex:1;text-align:center;padding:8px 6px;font-size:9.5px;}
+  }
+
+  /* ── entrance system ── */
+  @keyframes riseIn{from{opacity:0;transform:translateY(16px) scale(.985);}to{opacity:1;transform:none;}}
+  .rise{animation:riseIn .6s var(--ease) both;}
+  .reveal{opacity:0;transform:translateY(20px) scale(.98);
+    transition:opacity .7s var(--ease),transform .7s var(--ease);}
+  .reveal.in{opacity:1;transform:none;}
+
+  /* ── HOME ── */
+  .inbox{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--stroke);
+    border-radius:20px;padding:13px 15px;box-shadow:var(--s1);margin-bottom:14px;position:relative;overflow:hidden;
+    transition:transform .35s var(--spring),box-shadow .35s ease;}
+  .inbox:hover{transform:translateY(-2px);box-shadow:var(--s2);}
+  .inbox-icon{width:38px;height:38px;border-radius:12px;flex-shrink:0;background:var(--bg-deep);
+    display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .inbox-icon span{display:block;animation:bob 2.6s ease-in-out infinite;}
+  @keyframes bob{0%,100%{transform:translateY(0) rotate(0);}50%{transform:translateY(-2px) rotate(6deg);}}
+  .pulse-dot{width:6px;height:6px;border-radius:50%;background:var(--champagne);flex-shrink:0;position:relative;}
+  .pulse-dot::after{content:'';position:absolute;inset:0;border-radius:50%;background:var(--champagne);
+    animation:ping 2s var(--ease) infinite;}
+  @keyframes ping{0%{transform:scale(1);opacity:.6;}70%,100%{transform:scale(3.2);opacity:0;}}
+
+  .proj-row{display:grid;gap:14px;}
+  @media(min-width:900px){.proj-row{grid-template-columns:1fr 1fr;}}
+  .proj-card{border-radius:26px;overflow:hidden;position:relative;height:200px;box-shadow:var(--s2);
+    border:1px solid var(--stroke);cursor:pointer;transform-style:preserve-3d;
+    transition:transform .5s var(--ease),box-shadow .4s ease;}
+  @media(min-width:900px){.proj-card{height:230px;}}
+  .proj-card:hover{box-shadow:var(--s3);}
+  .proj-art{position:absolute;inset:-4%;transition:transform .8s var(--ease);}
+  .proj-card:hover .proj-art{transform:scale(1.06);}
+  .proj-sheen{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;
+    background:linear-gradient(112deg,transparent 44%,rgba(255,255,255,.16) 50%,transparent 56%);
+    background-size:300% 100%;animation:sheen 8s ease-in-out infinite;}
+  @keyframes sheen{0%,62%{background-position:140% 0;}92%,100%{background-position:-70% 0;}}
+  .proj-scrim{position:absolute;inset:0;background:linear-gradient(180deg,transparent 38%,rgba(20,16,10,.6));}
+  .proj-meta{position:absolute;left:0;right:0;bottom:0;padding:16px 18px;display:flex;align-items:flex-end;
+    justify-content:space-between;color:#FFF;gap:10px;}
+  .count-pill{font-family:'DM Mono';font-size:9.5px;letter-spacing:.12em;padding:6px 10px;border-radius:999px;flex-shrink:0;
+    background:rgba(255,255,255,.2);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid rgba(255,255,255,.26);transition:transform .4s var(--spring);}
+  .proj-card:hover .count-pill{transform:translateY(-2px);}
+
+  /* ── PROJECT GRID ── */
+  .dgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+  @media(min-width:900px){.dgrid{grid-template-columns:repeat(4,1fr);gap:16px;}}
+  .dcard{border-radius:20px;overflow:hidden;background:var(--card);border:1px solid var(--stroke);box-shadow:var(--s1);
+    cursor:pointer;position:relative;transform-style:preserve-3d;
+    transition:transform .45s var(--ease),box-shadow .4s ease;}
+  .dcard:hover{box-shadow:var(--s2);}
+  .dcard .art{height:150px;transition:transform .7s var(--ease);}
+  @media(min-width:900px){.dcard .art{height:170px;}}
+  .dcard:hover .art{transform:scale(1.07);}
+  .card-idx{position:absolute;top:9px;right:10px;font-family:'DM Mono';font-size:8.5px;letter-spacing:.1em;
+    color:rgba(255,255,255,.9);background:rgba(18,14,10,.34);padding:4px 7px;border-radius:999px;
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    opacity:0;transform:translateY(-4px);transition:all .4s var(--spring);}
+  .dcard:hover .card-idx{opacity:1;transform:none;}
+  @media(max-width:899px){.card-idx{opacity:1;transform:none;}}
+  .dcard .label{padding:11px 13px 13px;}
+  .dname{font-family:'Syne';font-weight:600;font-size:13.5px;}
+  .dstatus{font-family:'DM Mono';font-size:8.5px;letter-spacing:.14em;text-transform:uppercase;margin-top:5px;
+    display:flex;align-items:center;gap:5px;}
+  .dot{width:5px;height:5px;border-radius:50%;}
+  .st-final{color:var(--ok);}.st-final .dot{background:var(--ok);}
+  .st-dev{color:var(--warn);}.st-dev .dot{background:var(--warn);}
+  .st-mfg{color:var(--accent);}.st-mfg .dot{background:var(--accent);}
+
+  /* ── DESIGN DETAIL ── */
+  .detail-grid{display:grid;gap:22px;}
+  @media(min-width:900px){.detail-grid{grid-template-columns:5fr 6fr;align-items:start;gap:32px;}
+    .detail-hero{position:sticky;top:32px;}}
+
+  /* hero stack (gif 3) + rail (gif 2) */
+  .hero-stack{position:relative;perspective:1400px;width:100%;max-width:100%;margin-top:14px;}
+  .hero-img{border-radius:26px;overflow:hidden;height:min(300px,44dvh);position:relative;box-shadow:var(--s3);
+    border:1px solid var(--stroke);transform-style:preserve-3d;transition:transform .55s var(--ease);
+    width:100%;max-width:100%;}
+  @media(min-width:900px){.hero-img{height:440px;}}
+  .hero-layer{position:absolute;inset:0;transition:opacity .6s ease,transform .9s var(--ease);}
+  .hero-layer.out{opacity:0;transform:scale(1.05);}
+  .hero-sheen{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;
+    background:linear-gradient(112deg,transparent 44%,rgba(255,255,255,.14) 50%,transparent 56%);
+    background-size:300% 100%;animation:sheen 9s ease-in-out infinite;}
+  /* ghost cards behind = dimensional stack */
+  .hero-ghost{position:absolute;left:6%;right:6%;border-radius:22px;background:var(--card);border:1px solid var(--stroke);
+    box-shadow:var(--s1);z-index:-1;transition:transform .6s var(--ease);}
+  .hero-ghost.g1{top:-8px;height:40px;}
+  .hero-ghost.g2{top:-15px;left:11%;right:11%;height:40px;opacity:.6;}
+  .hero-stack:hover .hero-ghost.g1{transform:translateY(-3px);}
+  .hero-stack:hover .hero-ghost.g2{transform:translateY(-6px);}
+
+  .rail{display:flex;gap:8px;overflow-x:auto;padding:12px 2px 4px;scrollbar-width:none;scroll-snap-type:x proximity;}
+  .rail::-webkit-scrollbar{display:none;}
+  .rail-item{flex-shrink:0;width:52px;height:52px;border-radius:14px;overflow:hidden;border:2px solid transparent;
+    box-shadow:var(--s1);scroll-snap-align:center;cursor:pointer;position:relative;
+    transition:transform .4s var(--spring),border-color .3s ease,box-shadow .3s ease;
+    filter:saturate(.55);opacity:.7;}
+  .rail-item:hover{transform:translateY(-3px);filter:saturate(.9);opacity:1;}
+  .rail-item.on{border-color:var(--ink);transform:translateY(-4px) scale(1.04);filter:none;opacity:1;box-shadow:var(--s2);}
+  .rail-item i{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--ink);
+    transform:scaleX(0);transform-origin:center;transition:transform .4s var(--spring);}
+  .rail-item.on i{transform:scaleX(1);}
+
+  .actions{display:flex;gap:9px;margin-top:12px;width:100%;}
+  .action{flex:1 1 0;min-width:0;border-radius:16px;padding:12px 8px;text-align:center;background:var(--card);
+    border:1px solid var(--stroke);box-shadow:var(--s1);
+    transition:transform .35s var(--spring),box-shadow .3s ease;position:relative;overflow:hidden;}
+  .action:hover{transform:translateY(-2px);box-shadow:var(--s2);}
+  .action::before{content:'';position:absolute;inset:0;background:var(--ink);opacity:0;transition:opacity .3s ease;}
+  .action:active::before{opacity:.04;}
+  .a-eyebrow{font-family:'DM Mono';font-size:8.5px;letter-spacing:.16em;margin-bottom:3px;}
+  .a-t{font-size:12.5px;font-weight:500;}
+
+  /* timeline */
+  .tl{position:relative;padding-left:22px;margin-top:12px;}
+  .tl::before{content:'';position:absolute;left:4px;top:10px;bottom:14px;width:1px;
+    background:linear-gradient(180deg,var(--stroke-strong),transparent);}
+  .tl-item{position:relative;margin-bottom:20px;}
+  .tl-item.gone{display:none;}
+  .tl-item::before{content:'';position:absolute;left:-21px;top:6px;width:7px;height:7px;border-radius:50%;
+    background:var(--champagne);box-shadow:0 0 0 4px rgba(10,132,255,.16);
+    transition:transform .45s var(--spring),box-shadow .3s ease;}
+  .tl-item:hover::before{transform:scale(1.35);box-shadow:0 0 0 6px rgba(10,132,255,.22);}
+  .tl-head{display:flex;align-items:center;gap:7px;margin-bottom:7px;flex-wrap:wrap;}
+  .phase-tag{font-family:'DM Mono';font-size:8.5px;letter-spacing:.15em;text-transform:uppercase;padding:5px 8px;
+    border-radius:8px;background:var(--card);border:1px solid var(--stroke);box-shadow:var(--s1);}
+  .tl-date{font-family:'DM Mono';font-size:9.5px;color:var(--faint);}
+  .tl-card{border-radius:18px;overflow:hidden;border:1px solid var(--stroke);background:var(--card);box-shadow:var(--s1);
+    transition:transform .4s var(--ease),box-shadow .35s ease;}
+  .tl-card:hover{transform:translateY(-2px);box-shadow:var(--s2);}
+  .tl-media{overflow:hidden;cursor:pointer;}
+  .tl-media > div{transition:transform .8s var(--ease);}
+  .tl-card:hover .tl-media > div{transform:scale(1.05);}
+  .tl-cap{font-size:12.5px;line-height:1.55;color:#3C4757;padding:12px 14px;}
+  .tl-note{border-radius:18px;border:1px solid var(--stroke);background:var(--card);box-shadow:var(--s1);
+    padding:14px 15px;font-size:12.5px;line-height:1.6;color:#3C4757;
+    transition:transform .4s var(--ease),box-shadow .35s ease;}
+  .tl-note:hover{transform:translateY(-2px);box-shadow:var(--s2);}
+  .mood-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;}
+  .mood-grid > div{height:88px;cursor:pointer;transition:transform .5s var(--ease),filter .3s ease;}
+  .mood-grid > div:hover{transform:scale(1.04);filter:brightness(1.06);z-index:2;position:relative;}
+
+  .voice{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;background:var(--card);
+    border:1px solid var(--stroke);box-shadow:var(--s1);transition:transform .4s var(--ease),box-shadow .35s ease;}
+  .voice:hover{transform:translateY(-2px);box-shadow:var(--s2);}
+  .play{width:36px;height:36px;border-radius:50%;background:var(--ink);color:#FFF;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;transition:transform .35s var(--spring);}
+  .voice:active .play{transform:scale(.9);}
+  .wave{display:flex;align-items:center;gap:2.5px;flex:1;height:26px;overflow:hidden;}
+  .wave i{width:2.5px;border-radius:2px;background:rgba(21,34,56,.24);flex-shrink:0;transition:background .3s ease;}
+  .voice.playing .wave i{animation:pulseBar .9s ease-in-out infinite alternate;background:var(--champagne);}
+  @keyframes pulseBar{from{transform:scaleY(.5);}to{transform:scaleY(1.2);}}
+
+  /* media masonry — the page you screenshotted */
+  .media-wrap{margin-top:12px;}
+  .masonry{columns:2;column-gap:9px;}
+  @media(min-width:900px){.masonry{columns:3;column-gap:12px;}}
+  .m-tile{border-radius:16px;overflow:hidden;margin-bottom:9px;break-inside:avoid;position:relative;
+    border:1px solid var(--stroke);box-shadow:var(--s1);cursor:pointer;transform-style:preserve-3d;
+    animation:tileIn .55s var(--ease) both;
+    transition:transform .45s var(--ease),box-shadow .4s ease;}
+  @media(min-width:900px){.m-tile{margin-bottom:12px;}}
+  @keyframes tileIn{from{opacity:0;transform:translateY(22px) scale(.94);}to{opacity:1;transform:none;}}
+  .m-tile:hover{box-shadow:var(--s3);z-index:5;}
+  .m-art{transition:transform .8s var(--ease),filter .5s ease;}
+  .m-tile:hover .m-art{transform:scale(1.08);filter:brightness(1.04);}
+  .m-shine{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .4s ease;mix-blend-mode:screen;
+    background:radial-gradient(circle at var(--mx,50%) var(--my,50%),rgba(255,255,255,.28),transparent 55%);}
+  .m-tile:hover .m-shine{opacity:1;}
+  .m-tag{position:absolute;left:8px;bottom:8px;font-family:'DM Mono';font-size:8px;letter-spacing:.1em;
+    padding:4px 8px;border-radius:999px;background:rgba(255,255,255,.88);border:1px solid var(--stroke);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+    transform:translateY(2px);opacity:.9;transition:all .4s var(--spring);}
+  .m-tile:hover .m-tag{transform:none;opacity:1;}
+  .m-open{position:absolute;top:8px;right:8px;width:24px;height:24px;border-radius:50%;
+    background:rgba(255,255,255,.9);display:flex;align-items:center;justify-content:center;
+    opacity:0;transform:scale(.6) rotate(-30deg);transition:all .4s var(--spring);
+    backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+  .m-tile:hover .m-open{opacity:1;transform:none;}
+
+  /* ── GALLERY ── */
+  .gal-toggle{display:flex;gap:5px;padding:4px;border-radius:999px;background:var(--bg-deep);border:1px solid var(--stroke);}
+  .gal-mode{padding:8px 15px;border-radius:999px;font-family:'DM Mono';font-size:10px;letter-spacing:.08em;
+    color:var(--fog);transition:all .32s var(--ease);}
+  .gal-mode.on{background:var(--ink);color:#FFF;box-shadow:var(--s1);}
+  .fan-stage{position:relative;height:min(400px,58dvh);margin-top:10px;display:flex;align-items:center;justify-content:center;
+    perspective:1300px;touch-action:pan-y;overflow:hidden;width:100%;}
+  @media(min-width:900px){.fan-stage{height:500px;}}
+  .fan-card{position:absolute;width:min(250px,66vw);height:min(340px,48dvh);border-radius:24px;overflow:hidden;
+    box-shadow:var(--s3);border:1px solid var(--stroke);cursor:pointer;
+    transition:transform .6s var(--ease),opacity .5s ease,filter .5s ease;}
+  @media(min-width:900px){.fan-card{width:300px;height:410px;}}
+  .fan-art{position:absolute;inset:0;transition:transform .8s var(--ease);}
+  .fan-card.center:hover .fan-art{transform:scale(1.05);}
+  .fan-label{position:absolute;left:13px;bottom:13px;color:#FFF;z-index:2;}
+  .fan-nav{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:4px;}
+  .fan-count{font-family:'DM Mono';font-size:10.5px;letter-spacing:.1em;color:var(--fog);background:var(--card);
+    border:1px solid var(--stroke);border-radius:999px;padding:9px 15px;box-shadow:var(--s1);
+    max-width:56vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .arrow{width:40px;height:40px;border-radius:50%;flex-shrink:0;}
+  .ring-stage{position:relative;height:min(520px,74dvh);display:none;align-items:center;justify-content:center;
+    overflow:hidden;width:100%;}
+  .ring{position:relative;animation:spin 64s linear infinite;}
+  .ring-stage:hover .ring{animation-play-state:paused;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .ring-item{position:absolute;width:52px;height:68px;border-radius:9px;overflow:hidden;box-shadow:var(--s2);
+    border:1px solid var(--stroke);left:50%;top:50%;margin:-34px 0 0 -26px;
+    transition:transform .4s var(--spring),box-shadow .3s ease;cursor:pointer;}
+  .ring-item:hover{box-shadow:var(--s3);z-index:9;}
+  .ring-item > div{width:100%;height:100%;animation:spinBack 64s linear infinite;}
+  @keyframes spinBack{to{transform:rotate(-360deg);}}
+  .ring-center{position:absolute;text-align:center;pointer-events:none;}
+  .ring-center > *{pointer-events:auto;}
+
+  /* ── STUDIO ── */
+  .studio-grid{display:grid;gap:16px;margin-top:6px;}
+  .sg-canvas{order:1;}.sg-pal{order:2;}.sg-rail{order:3;}
+  @media(min-width:900px){
+    .studio-grid{grid-template-columns:270px 1fr 270px;align-items:start;gap:20px;}
+    .sg-pal{order:1;}.sg-canvas{order:2;}.sg-rail{order:3;}
+  }
+  .panel{background:var(--card);border:1px solid var(--stroke);border-radius:22px;box-shadow:var(--s1);}
+  .canvas-panel{padding:18px;text-align:center;position:relative;overflow:hidden;}
+  .canvas-bg{background:radial-gradient(ellipse at 50% 28%,#FDFEFF,var(--bg-deep));border-radius:18px;
+    padding:14px 10px 8px;border:1px solid var(--stroke);position:relative;overflow:hidden;}
+  .canvas-bg::after{content:'';position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;
+    background:linear-gradient(112deg,transparent 45%,rgba(255,255,255,.5) 50%,transparent 55%);
+    background-size:300% 100%;animation:sheen 10s ease-in-out infinite;}
+  .region{transition:fill .5s var(--ease),stroke .5s var(--ease),opacity .35s ease,transform .4s var(--spring);
+    cursor:pointer;transform-origin:center;transform-box:fill-box;}
+  .region:hover{filter:brightness(1.08);}
+  .region.sel{filter:drop-shadow(0 0 5px rgba(10,132,255,.4));}
+  @keyframes rPulse{0%{transform:scale(1);}45%{transform:scale(1.04);}100%{transform:scale(1);}}
+  .region.pulse{animation:rPulse .55s var(--spring);}
+  .legend{display:flex;justify-content:center;gap:12px;margin-top:10px;font-family:'DM Mono';font-size:8.5px;
+    letter-spacing:.12em;text-transform:uppercase;color:var(--fog);flex-wrap:wrap;}
+  .region-row{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:13px;
+    border:1px solid var(--stroke);margin-bottom:7px;gap:8px;cursor:pointer;
+    transition:all .35s var(--ease);}
+  .region-row:hover{transform:translateX(2px);border-color:var(--stroke-strong);}
+  .region-row.sel{border-color:rgba(10,132,255,.35);background:rgba(10,132,255,.05);}
+  .region-row.lock{background:var(--bg-deep);}
+  .rr-state{font-family:'DM Mono';font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;padding:5px 8px;
+    border-radius:7px;flex-shrink:0;transition:background .3s var(--ease),color .3s var(--ease);}
+  .rr-label{transition:color .3s var(--ease);}
+  .rr-state.sel{background:var(--indigo);color:#FFF;}
+  .rr-state.lock{background:var(--ink);color:#FFF;}
+  .rr-state.none{background:var(--bg-deep);color:var(--faint);}
+  .conf{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+  .conf.hi{background:var(--ok);}.conf.mid{background:var(--warn);}
+
+  .pal-rail{display:flex;gap:9px;overflow-x:auto;padding:5px 2px 10px;scrollbar-width:none;
+    scroll-snap-type:x mandatory;max-width:100%;}
+  .pal-rail::-webkit-scrollbar{display:none;}
+  @media(min-width:900px){.pal-rail{flex-direction:column;overflow-x:visible;max-height:530px;overflow-y:auto;padding-right:5px;}}
+  .pal-card{flex-shrink:0;width:142px;border-radius:16px;padding:11px;background:var(--card);
+    border:1.5px solid var(--stroke);box-shadow:var(--s1);scroll-snap-align:center;cursor:pointer;
+    transition:transform .4s var(--spring),border-color .3s ease,box-shadow .35s ease;}
+  @media(min-width:900px){.pal-card{width:auto;}}
+  .pal-card:hover{transform:translateY(-3px);box-shadow:var(--s2);}
+  .pal-card.on{border-color:var(--ink);box-shadow:var(--s2);transform:translateY(-3px);}
+  .pal-blocks{display:flex;height:40px;border-radius:9px;overflow:hidden;border:1px solid var(--stroke);}
+  .pal-blocks > div{flex:1;transition:flex .45s var(--ease);}
+  .pal-card:hover .pal-blocks > div:hover{flex:1.7;}
+  .pal-name{font-family:'Syne';font-weight:600;font-size:12px;margin-top:8px;}
+  .pal-id{font-family:'DM Mono';font-size:8.5px;color:var(--faint);letter-spacing:.1em;margin-top:2px;}
+  .slot-list{padding:14px;}
+  .slot-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:13px;border:1px solid var(--stroke);
+    margin-bottom:7px;animation:riseIn .5s var(--ease) both;}
+  .slot-swatch{width:24px;height:24px;border-radius:7px;border:1px solid var(--stroke);flex-shrink:0;
+    transition:transform .4s var(--spring),background .45s var(--ease);}
+  .slot-row:hover .slot-swatch{transform:scale(1.12) rotate(-4deg);}
+  .gen-btn{width:100%;border-radius:16px;padding:14px;background:var(--ink);color:#FFF;display:flex;align-items:center;
+    justify-content:space-between;box-shadow:0 12px 28px rgba(21,40,74,.24);
+    transition:transform .35s var(--spring),box-shadow .3s ease;position:relative;overflow:hidden;}
+  .gen-btn:hover{transform:translateY(-2px);box-shadow:0 16px 36px rgba(23,24,29,.28);}
+  .gen-btn:active{transform:scale(.98);}
+  .gen-btn svg{transition:transform .4s var(--spring);}
+  .gen-btn:hover svg{transform:translateX(3px);}
+  .progress-wrap{height:3px;border-radius:99px;background:var(--bg-deep);overflow:hidden;margin-top:12px;}
+  .progress-bar{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,#4BA5FF,var(--accent));
+    transition:width .4s ease;}
+  .results-stage{position:relative;height:min(420px,60dvh);display:flex;align-items:center;justify-content:center;
+    perspective:1100px;overflow:hidden;width:100%;touch-action:pan-y;}
+  .res-card{position:absolute;width:min(240px,64vw);border-radius:22px;overflow:hidden;background:var(--card);
+    border:1px solid var(--stroke);box-shadow:var(--s3);transition:transform .6s var(--ease),opacity .5s ease;}
+  @media(min-width:900px){.res-card{width:270px;}}
+  .res-art{padding:16px 12px 4px;background:radial-gradient(ellipse at 50% 28%,#FDFEFF,var(--bg-deep));}
+  .res-meta{padding:11px 13px 13px;}
+  .res-chips{display:flex;gap:4px;margin-bottom:8px;}
+  .res-chips span{width:17px;height:17px;border-radius:5px;border:1px solid var(--stroke);
+    transition:transform .4s var(--spring);}
+  .res-card:hover .res-chips span{transform:translateY(-2px);}
+  .res-chips span:nth-child(2){transition-delay:.04s;}
+  .res-chips span:nth-child(3){transition-delay:.08s;}
+  .save-btn{width:100%;border-radius:11px;padding:9px;background:var(--bg-deep);font-size:11.5px;font-weight:500;
+    transition:all .3s var(--ease);}
+  .save-btn:hover{background:var(--stroke-strong);}
+  .save-btn.saved{background:#E3F3EA;color:var(--ok);}
+
+  /* ── SHEETS / LIGHTBOX ── */
+  .sheet-wrap{position:fixed;inset:0;z-index:300;pointer-events:none;}
+  .sheet-wrap.open{pointer-events:auto;}
+  .backdrop{position:absolute;inset:0;background:rgba(23,24,29,.3);opacity:0;transition:opacity .4s ease;
+    backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);}
+  .sheet-wrap.open .backdrop{opacity:1;}
+  .sheet{position:absolute;left:10px;right:10px;bottom:10px;border-radius:28px;padding:18px 16px 22px;
+    background:rgba(252,253,255,.95);border:1px solid var(--stroke);
+    backdrop-filter:blur(40px) saturate(170%);-webkit-backdrop-filter:blur(40px) saturate(170%);
+    transform:translateY(115%);transition:transform .55s var(--ease);box-shadow:var(--s3);
+    max-height:84dvh;overflow-y:auto;}
+  @media(min-width:900px){.sheet{left:50%;right:auto;width:450px;transform:translate(-50%,115%);}
+    .sheet-wrap.open .sheet{transform:translate(-50%,0);}}
+  @media(max-width:899px){.sheet-wrap.open .sheet{transform:translateY(0);}}
+  .grabber{width:34px;height:4px;border-radius:99px;background:rgba(21,34,56,.15);margin:0 auto 14px;}
+  .dest-pill{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;background:var(--bg);
+    border:1px solid var(--stroke-strong);font-size:11.5px;transition:all .3s var(--spring);}
+  .dest-pill:active{transform:scale(.94);}
+  .cap-row{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;}
+  .cap-opt{border-radius:16px;padding:13px 3px 10px;text-align:center;background:var(--bg);border:1px solid var(--stroke);
+    animation:riseIn .45s var(--ease) both;transition:transform .35s var(--spring),background .3s ease;}
+  .cap-opt:hover{transform:translateY(-3px);background:var(--bg-deep);}
+  .cap-opt:nth-child(2){animation-delay:.05s;}.cap-opt:nth-child(3){animation-delay:.1s;}
+  .cap-opt:nth-child(4){animation-delay:.15s;}.cap-opt:nth-child(5){animation-delay:.2s;}
+  .cap-opt .t{font-family:'DM Mono';font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--fog);margin-top:5px;}
+  .mb-pick{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:12px;}
+  .mb-thumb{height:80px;border-radius:13px;position:relative;border:2px solid transparent;cursor:pointer;overflow:hidden;
+    transition:all .35s var(--spring);}
+  .mb-thumb:hover{transform:scale(1.03);}
+  .mb-thumb.sel{border-color:var(--ink);transform:scale(.96);}
+  .mb-check{position:absolute;top:5px;right:5px;width:19px;height:19px;border-radius:50%;background:var(--ink);color:#FFF;
+    display:flex;align-items:center;justify-content:center;font-size:10px;
+    opacity:0;transform:scale(.4);transition:all .35s var(--spring);}
+  .mb-thumb.sel .mb-check{opacity:1;transform:none;}
+  .field{width:100%;border-radius:14px;border:1px solid var(--stroke-strong);background:var(--bg);padding:12px 14px;
+    font-size:13px;margin-top:10px;outline:none;transition:border-color .3s ease,box-shadow .3s ease;}
+  .field:focus{border-color:var(--ink);box-shadow:0 0 0 3px rgba(23,24,29,.06);}
+  textarea.field{min-height:84px;resize:none;}
+  .rec-circle{width:70px;height:70px;border-radius:50%;background:var(--ink);color:#FFF;display:flex;align-items:center;
+    justify-content:center;margin:16px auto 6px;transition:all .4s var(--spring);}
+  .rec-circle.rec{background:#C0392B;animation:recPulse 1.6s ease-in-out infinite;}
+  @keyframes recPulse{0%,100%{box-shadow:0 0 0 0 rgba(192,57,43,.35);}50%{box-shadow:0 0 0 14px rgba(192,57,43,0);}}
+  .primary-btn{width:100%;border-radius:14px;padding:13px;background:var(--ink);color:#FFF;font-size:13px;font-weight:500;
+    margin-top:12px;transition:transform .35s var(--spring);}
+  .primary-btn:active{transform:scale(.98);}
+  .share-link{display:flex;align-items:center;justify-content:space-between;gap:9px;border-radius:14px;padding:12px 14px;
+    background:var(--bg);border:1px solid var(--stroke);margin-top:12px;}
+
+  .lightbox{position:fixed;inset:0;z-index:500;background:rgba(12,17,26,.95);display:none;flex-direction:column;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);}
+  .lightbox.open{display:flex;animation:lbIn .4s var(--ease) both;}
+  @keyframes lbIn{from{opacity:0;}to{opacity:1;}}
+  .lb-top{display:flex;align-items:center;justify-content:space-between;padding:max(env(safe-area-inset-top),16px) 16px 10px;color:#FFF;}
+  .lb-stage{flex:1;position:relative;overflow:hidden;touch-action:pan-y;}
+  .lb-img{position:absolute;inset:20px;border-radius:20px;box-shadow:0 30px 80px rgba(0,0,0,.55);
+    transition:transform .6s var(--ease),opacity .45s ease;}
+  .lb-meta{padding:12px 20px max(env(safe-area-inset-bottom),20px);color:#FFF;text-align:center;}
+  .lb-src{font-family:'DM Mono';font-size:9.5px;letter-spacing:.1em;color:rgba(255,255,255,.5);margin-top:4px;}
+  .lb-edge{position:absolute;top:0;bottom:0;width:22%;cursor:pointer;}
+  .lb-edge.l{left:0;}.lb-edge.r{right:0;}
+
+  .toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(18px);z-index:600;
+    padding:10px 17px;border-radius:999px;font-family:'DM Mono';font-size:10.5px;background:var(--ink);color:#FFF;
+    opacity:0;transition:all .45s var(--spring);pointer-events:none;box-shadow:var(--s3);max-width:86vw;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .back-inline{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--fog);
+    margin-top:max(env(safe-area-inset-top),16px);transition:transform .3s var(--ease);}
+  .back-inline:hover{transform:translateX(-3px);}
+
+  /* ══════════════════════════════════════════════════════════
+     TACTILE LAYER — every control becomes a key.
+     Rules: travel (never scale) · fast down, springy up ·
+     the side wall collapses on strike · light always from above ·
+     selected = latched (stays depressed).
+     ══════════════════════════════════════════════════════════ */
+
+  /* ── filter keys: latching bank ── */
+  .chip{
+    background:var(--key-face);border:1px solid var(--key-rim);
+    box-shadow:var(--sh-up);
+    transform:translateY(0);
+    transition:transform var(--up),box-shadow var(--up),background .3s ease,color .3s ease;
+  }
+  .chip:hover{background:var(--key-face-hi);}
+  .chip:active{transform:translateY(var(--travel));box-shadow:var(--sh-down);
+    transition:transform var(--down),box-shadow var(--down);}
+  .chip.on{
+    color:#FFF;background:var(--key-dark);border-color:var(--key-rim-dark);
+    transform:translateY(2px);box-shadow:var(--sh-latch);
+    text-shadow:0 1px 0 rgba(0,0,0,.4);
+  }
+  .chip.on:active{transform:translateY(4px);}
+
+  /* ── segmented housing: active key rises OUT of the well ── */
+  .seg,.gal-toggle{
+    background:var(--bg-deep);border:1px solid var(--stroke);box-shadow:var(--sh-well);
+  }
+  .seg button,.gal-mode{
+    background:transparent;border:1px solid transparent;
+    transition:all var(--up);
+  }
+  .seg button:active,.gal-mode:active{transform:translateY(1px);transition:all var(--down);}
+  .seg button.on,.gal-mode.on{
+    color:var(--ink);background:var(--key-face);border-color:var(--key-rim);
+    box-shadow:0 1px 0 0 var(--key-rim),0 3px 6px -1px var(--key-cast),inset 0 1px 0 0 var(--key-lip);
+    transform:translateY(-1px);
+  }
+  /* studio step keys keep the dark latch + champagne memory */
+  #st-1.on,#st-2.on,#st-3.on{
+    color:#FFF;background:var(--key-dark);border-color:var(--key-rim-dark);
+    box-shadow:0 1px 3px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.12);
+    text-shadow:0 1px 0 rgba(0,0,0,.4);transform:translateY(0);
+  }
+  .seg button.done{color:var(--champagne);}
+
+  /* ── the dome: capture FAB ── */
+  .fab{
+    background:radial-gradient(circle at 38% 28%,#4A5566 0%,#2A3340 42%,#151A22 100%);
+    border:1px solid var(--key-rim-dark);
+    box-shadow:0 3px 0 0 var(--key-rim-dark),0 8px 18px -4px rgba(21,40,74,.4),
+      inset 0 2px 2px 0 rgba(255,255,255,.22),inset 0 -3px 6px 0 rgba(0,0,0,.45);
+    transition:transform var(--up),box-shadow var(--up);
+  }
+  .fab:active{
+    transform:translateY(3px);
+    box-shadow:0 0 0 0 var(--key-rim-dark),0 2px 5px -1px rgba(21,40,74,.3),
+      inset 0 2px 6px 0 rgba(0,0,0,.55),inset 0 -1px 0 0 rgba(255,255,255,.1);
+    transition:transform var(--down),box-shadow var(--down);
+  }
+  .fab svg{transition:transform var(--up);}
+  .fab:active svg{transform:scale(.88);}
+
+  /* ── round transport keys: arrows, share, search ── */
+  .glassbtn,.arrow{
+    background:var(--key-face);border:1px solid var(--key-rim);
+    backdrop-filter:none;-webkit-backdrop-filter:none;
+    box-shadow:var(--sh-up);
+    transition:transform var(--up),box-shadow var(--up),background .3s ease;
+  }
+  .glassbtn:hover,.arrow:hover{background:var(--key-face-hi);box-shadow:var(--sh-up);}
+  .glassbtn:active,.arrow:active{
+    transform:translateY(var(--travel));box-shadow:var(--sh-down);
+    transition:transform var(--down),box-shadow var(--down);
+  }
+
+  /* ── big keys: generate, capture, primary ── */
+  .gen-btn,.primary-btn{
+    background:var(--key-dark);border:1px solid var(--key-rim-dark);
+    box-shadow:0 4px 0 0 var(--key-rim-dark),0 10px 22px -6px rgba(21,40,74,.4),
+      inset 0 1px 0 0 rgba(255,255,255,.16),inset 0 -2px 6px 0 rgba(0,0,0,.4);
+    transition:transform var(--up),box-shadow var(--up);
+  }
+  .gen-btn:hover{transform:translateY(-1px);box-shadow:0 5px 0 0 var(--key-rim-dark),0 14px 28px -6px rgba(21,40,74,.44),
+      inset 0 1px 0 0 rgba(255,255,255,.16),inset 0 -2px 6px 0 rgba(0,0,0,.4);}
+  .gen-btn:active,.primary-btn:active{
+    transform:translateY(4px);
+    box-shadow:0 0 0 0 var(--key-rim-dark),0 3px 8px -3px rgba(21,40,74,.3),inset 0 2px 7px 0 rgba(0,0,0,.5);
+    transition:transform var(--down),box-shadow var(--down);
+  }
+  .gen-btn svg{transition:transform var(--up);}
+  .gen-btn:active svg{transform:translateX(2px);}
+
+  /* ── action keys on the design page ── */
+  .action{
+    background:var(--key-face);border:1px solid var(--key-rim);
+    box-shadow:var(--sh-up);
+    transition:transform var(--up),box-shadow var(--up),background .3s ease;
+  }
+  .action:hover{background:var(--key-face-hi);transform:translateY(-1px);
+    box-shadow:0 3px 0 0 var(--key-rim),0 7px 14px -3px var(--key-cast),inset 0 1px 0 0 var(--key-lip);}
+  .action:active{transform:translateY(var(--travel));box-shadow:var(--sh-down);
+    transition:transform var(--down),box-shadow var(--down);}
+
+  /* ── palette cards: latching keys in a rail ── */
+  .pal-card{
+    background:var(--key-face);border:1px solid var(--key-rim);
+    box-shadow:var(--sh-up);
+    transition:transform var(--up),box-shadow var(--up),border-color .3s ease;
+  }
+  .pal-card:hover{transform:translateY(-2px);
+    box-shadow:0 3px 0 0 var(--key-rim),0 8px 16px -3px var(--key-cast),inset 0 1px 0 0 var(--key-lip);}
+  .pal-card:active{transform:translateY(var(--travel));box-shadow:var(--sh-down);
+    transition:transform var(--down),box-shadow var(--down);}
+  .pal-card.on{
+    border-color:var(--key-rim-dark);transform:translateY(2px);
+    box-shadow:0 0 0 0 var(--key-rim-dark),0 1px 3px rgba(23,24,29,.24),
+      inset 0 2px 5px -1px rgba(23,24,29,.18),inset 0 -1px 0 0 rgba(255,255,255,.7);
+    background:linear-gradient(180deg,#EDF2F9,#FAFCFE);
+  }
+  .pal-card.on .pal-name{color:var(--ink);}
+
+  /* ── region rows: latching switches ── */
+  .region-row{
+    background:var(--key-face);border:1px solid var(--key-rim);
+    box-shadow:var(--sh-up);
+    transition:transform var(--up),box-shadow var(--up),background .3s ease,border-color .3s ease;
+  }
+  .region-row:hover{background:var(--key-face-hi);transform:translateY(-1px);}
+  .region-row:active{transform:translateY(2px);box-shadow:var(--sh-down);
+    transition:transform var(--down),box-shadow var(--down);}
+  .region-row.sel{
+    border-color:var(--accent-line);transform:translateY(2px);
+    background:linear-gradient(180deg,#E4EFFE,#F3F8FF);
+    box-shadow:0 0 0 0 rgba(10,132,255,.4),0 1px 3px rgba(10,132,255,.2),
+      inset 0 2px 5px -1px rgba(10,132,255,.24),inset 0 -1px 0 0 rgba(255,255,255,.8);
+  }
+  .region-row.lock{
+    border-color:var(--key-rim-dark);transform:translateY(2px);
+    background:linear-gradient(180deg,#DCE4EE,#EAF0F7);
+    box-shadow:0 0 0 0 var(--key-rim-dark),0 1px 3px rgba(23,24,29,.2),
+      inset 0 2px 5px -1px rgba(23,24,29,.2),inset 0 -1px 0 0 rgba(255,255,255,.7);
+  }
+  .rr-state{box-shadow:inset 0 1px 0 rgba(255,255,255,.18);}
+
+  /* ── hero rail thumbs: latching image keys ── */
+  .rail-item{
+    box-shadow:var(--sh-up);
+    transition:transform var(--up),box-shadow var(--up),filter .3s ease,opacity .3s ease,border-color .3s ease;
+  }
+  .rail-item:active{transform:translateY(2px);box-shadow:var(--sh-down);
+    transition:transform var(--down),box-shadow var(--down);}
+  .rail-item.on{
+    border-color:var(--key-rim-dark);transform:translateY(2px);
+    box-shadow:0 0 0 0 var(--key-rim-dark),0 1px 3px rgba(23,24,29,.26),
+      inset 0 2px 5px -1px rgba(23,24,29,.35);
+  }
+
+  /* ── small keys: save, capture tiles, dest pill ── */
+  .save-btn,.cap-opt,.dest-pill{
+    background:var(--key-face);border:1px solid var(--key-rim);
+    box-shadow:var(--sh-up);
+    transition:transform var(--up),box-shadow var(--up),background .3s ease;
+  }
+  .save-btn:hover,.cap-opt:hover,.dest-pill:hover{background:var(--key-face-hi);}
+  .save-btn:active,.cap-opt:active,.dest-pill:active{
+    transform:translateY(2px);box-shadow:var(--sh-down);
+    transition:transform var(--down),box-shadow var(--down);}
+  .save-btn.saved{
+    background:linear-gradient(180deg,#E3F3EA,#D2EADC);border-color:#96C4AB;color:var(--ok);
+    transform:translateY(2px);
+    box-shadow:0 0 0 0 #96C4AB,0 1px 3px rgba(27,127,82,.18),inset 0 2px 4px -1px rgba(27,127,82,.2);
+  }
+
+  /* ── tab bar: keys in a rail, active one latched ── */
+  .tabbar{background:rgba(250,252,255,.88);box-shadow:var(--s3),var(--sh-well);}
+  .tab{border-radius:20px;transition:transform var(--up),background .3s ease,color .3s ease;}
+  .tab:active{transform:translateY(2px);transition:transform var(--down);}
+  .tab.on{
+    background:var(--key-face);
+    box-shadow:0 1px 0 0 var(--key-rim),0 3px 6px -1px var(--key-cast),inset 0 1px 0 0 var(--key-lip);
+  }
+
+  /* ── sidebar nav keys ── */
+  @media(min-width:900px){
+    .snav{transition:transform var(--up),background .3s ease,box-shadow .3s ease;}
+    .snav:active{transform:translateY(2px);transition:transform var(--down);}
+    .snav.on{background:var(--key-face);border:1px solid var(--key-rim);
+      box-shadow:0 1px 0 0 var(--key-rim),0 3px 6px -1px var(--key-cast),inset 0 1px 0 0 var(--key-lip);}
+  }
+
+  /* respect reduced motion — keep the depth, drop the bounce */
+  @media(prefers-reduced-motion:reduce){
+    *{animation:none!important;}
+    .chip,.action,.pal-card,.region-row,.glassbtn,.arrow,.gen-btn,.fab,.save-btn,.cap-opt{
+      transition:box-shadow .12s linear,background .12s linear!important;}
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div>
+      <div class="syne" style="font-size:21px;font-weight:800;">Atelier</div>
+      <div class="mono" style="font-size:8.5px;letter-spacing:.2em;color:var(--faint);margin-top:3px;">DESIGN ARCHIVE</div>
+    </div>
+    <nav class="side-nav">
+      <button class="snav on" data-nav="home" onclick="nav('home')">Home</button>
+      <button class="snav" data-nav="gallery" onclick="nav('gallery')">Gallery</button>
+      <button class="snav" data-nav="studio" onclick="nav('studio')">Wada Studio</button>
+    </nav>
+    <div style="margin-top:auto;">
+      <button class="gen-btn press" style="padding:12px 15px;" onclick="openCapture()">
+        <span style="font-size:13px;font-weight:500;">Capture</span><span style="font-size:15px;">+</span>
+      </button>
+      <div style="display:flex;align-items:center;gap:9px;margin-top:16px;padding:0 4px;">
+        <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(140deg,#0A84FF,#0059B3);"></div>
+        <div><div style="font-size:12px;font-weight:500;">Beezy</div>
+          <div class="mono" style="font-size:8.5px;color:var(--faint);">rei by Rei</div></div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- HOME -->
+    <section class="view active" id="v-home">
+      <div class="content">
+        <div class="hdr">
+          <div class="rise">
+            <div class="eyebrow" style="margin-bottom:4px;">Beezy · 2 projects · 15 designs</div>
+            <div class="syne" style="font-size:30px;font-weight:800;">Atelier</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="glassbtn press rise" id="snd-btn" style="width:40px;height:40px;animation-delay:.04s;" onclick="toggleSound()" title="Key click">
+              <svg id="snd-icon" width="16" height="16" viewBox="0 0 18 18" fill="none">
+                <path d="M4 6.5h2.5L10 3.5v11L6.5 11.5H4a1 1 0 01-1-1v-3a1 1 0 011-1z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+                <path id="snd-wave" d="M12.5 6.5a3.5 3.5 0 010 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.25"/>
+              </svg>
+            </button>
+            <button class="glassbtn press rise" style="width:40px;height:40px;animation-delay:.06s;">
+              <svg width="16" height="16" viewBox="0 0 17 17" fill="none"><circle cx="7.5" cy="7.5" r="5.2" stroke="currentColor" stroke-width="1.4"/><path d="M11.5 11.5L15 15" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="inbox press rise" style="animation-delay:.08s;" onclick="toast('Inbox — triage unsorted inspiration')">
+          <div class="inbox-icon"><span>✨</span></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:500;">Inbox</div>
+            <div class="mono" style="font-size:9.5px;color:var(--faint);margin-top:2px;">3 unsorted · shared from IG &amp; Safari</div>
+          </div>
+          <div class="pulse-dot"></div>
+        </div>
+
+        <div class="proj-row">
+          <div class="proj-card rise tilt" style="animation-delay:.14s;" onclick="nav('project')">
+            <div class="proj-art" style="background:radial-gradient(ellipse at 25% 25%,#C9955A 0%,transparent 55%),radial-gradient(ellipse at 80% 75%,#8A5A30 0%,transparent 50%),linear-gradient(140deg,#5E3A1E,#8A5C34 45%,#3E2814);"></div>
+            <div class="proj-sheen"></div><div class="proj-scrim"></div>
+            <div class="proj-meta">
+              <div><div class="mono" style="font-size:8.5px;letter-spacing:.22em;color:#F0DEC0;margin-bottom:4px;">霊 · LEATHER GOODS</div>
+                <div class="syne" style="font-size:22px;font-weight:700;">rei by Rei</div></div>
+              <div class="count-pill">12 designs</div>
+            </div>
+          </div>
+          <div class="proj-card rise tilt" style="animation-delay:.2s;" onclick="toast('Same pattern — project view')">
+            <div class="proj-art" style="background:radial-gradient(ellipse at 70% 25%,#6FB5A8 0%,transparent 55%),radial-gradient(ellipse at 20% 80%,#3E8578 0%,transparent 50%),linear-gradient(150deg,#1E5048,#3E7E70 50%,#123830);"></div>
+            <div class="proj-sheen"></div><div class="proj-scrim"></div>
+            <div class="proj-meta">
+              <div><div class="mono" style="font-size:8.5px;letter-spacing:.22em;color:#C4EDE2;margin-bottom:4px;">CONCEPT · DRESSES</div>
+                <div class="syne" style="font-size:22px;font-weight:700;">Mermaid Series</div></div>
+              <div class="count-pill">3 designs</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROJECT -->
+    <section class="view" id="v-project">
+      <div class="content">
+        <button class="back-inline press" onclick="nav('home')">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>All projects</button>
+        <div class="hdr" style="padding-top:12px;">
+          <div class="rise">
+            <div class="eyebrow" style="margin-bottom:4px;">霊 · Leather goods · index of 12</div>
+            <div class="syne" style="font-size:28px;font-weight:800;">rei by Rei</div>
+          </div>
+        </div>
+        <div class="chips" style="margin-bottom:14px;">
+          <button class="chip on" data-f="all" onclick="projFilter('all',this)">All · 6</button>
+          <button class="chip" data-f="final" onclick="projFilter('final',this)">Final · 3</button>
+          <button class="chip" data-f="dev" onclick="projFilter('dev',this)">Developing · 2</button>
+          <button class="chip" data-f="mfg" onclick="projFilter('mfg',this)">In production · 1</button>
+        </div>
+        <div class="dgrid" id="dgrid"></div>
+      </div>
+    </section>
+
+    <!-- DESIGN DETAIL -->
+    <section class="view" id="v-design">
+      <div class="content">
+        <button class="back-inline press" onclick="nav('project')">
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>rei by Rei</button>
+        <div class="hdr" style="padding-top:12px;align-items:flex-start;">
+          <div class="rise">
+            <div class="dstatus st-final" style="margin-bottom:6px;"><span class="dot"></span>Final · 8 months, mood board → product</div>
+            <div class="syne" style="font-size:28px;font-weight:800;">Barrel Bag 001</div>
+          </div>
+          <button class="glassbtn press rise" style="width:40px;height:40px;animation-delay:.06s;" onclick="openSheet('share')">
+            <svg width="14" height="15" viewBox="0 0 15 16" fill="none"><path d="M7.5 1v9M7.5 1L4 4.5M7.5 1L11 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2 8v5.5h11V8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+
+        <div class="detail-grid">
+          <!-- HERO + RAIL -->
+          <div class="detail-hero rise" style="animation-delay:.08s;">
+            <div class="hero-stack">
+              <div class="hero-ghost g2"></div>
+              <div class="hero-ghost g1"></div>
+              <div class="hero-img tilt" id="hero">
+                <div class="hero-layer" id="hero-a"></div>
+                <div class="hero-layer out" id="hero-b"></div>
+                <div class="hero-sheen"></div>
+              </div>
+            </div>
+            <div class="rail" id="hero-rail"></div>
+            <div class="actions">
+              <button class="action press" onclick="nav('studio');toast('Barrel Bag loaded into Studio')">
+                <div class="a-eyebrow" style="color:var(--champagne);">WADA STUDIO</div><div class="a-t">Explore colorways</div>
+              </button>
+              <button class="action press" onclick="toast('3D — future flex')">
+                <div class="a-eyebrow" style="color:var(--faint);">VIEW</div><div class="a-t">Spin in 3D</div>
+              </button>
+            </div>
+          </div>
+
+          <!-- TIMELINE / MEDIA -->
+          <div class="rise" style="animation-delay:.14s;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:4px 0 10px;flex-wrap:wrap;">
+              <div class="seg">
+                <button class="on" id="dv-timeline" onclick="detailView('timeline')">Timeline</button>
+                <button id="dv-media" onclick="detailView('media')">Media</button>
+              </div>
+              <div class="mono" style="font-size:9px;color:var(--faint);letter-spacing:.1em;" id="dv-count">7 entries</div>
+            </div>
+            <div class="chips" id="phase-chips">
+              <button class="chip on" data-ph="all" onclick="phaseFilter('all',this)">All</button>
+              <button class="chip" data-ph="moodboard" onclick="phaseFilter('moodboard',this)">Moodboards</button>
+              <button class="chip" data-ph="inspo" onclick="phaseFilter('inspo',this)">Inspiration</button>
+              <button class="chip" data-ph="note" onclick="phaseFilter('note',this)">Notes</button>
+              <button class="chip" data-ph="voice" onclick="phaseFilter('voice',this)">Voice</button>
+              <button class="chip" data-ph="making" onclick="phaseFilter('making',this)">Making</button>
+              <button class="chip" data-ph="studio" onclick="phaseFilter('studio',this)">Studio</button>
+            </div>
+
+            <div class="tl" id="detail-timeline">
+              <div class="tl-item reveal" data-ph="studio">
+                <div class="tl-head"><span class="phase-tag">Colorway study</span><span class="tl-date">Jul 2026</span></div>
+                <div class="tl-card">
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;">
+                    <div class="tl-media" style="height:70px;" onclick="openLB('studio',0)"><div style="height:100%;background:linear-gradient(150deg,#AE5224,#7A3A18);"></div></div>
+                    <div class="tl-media" style="height:70px;" onclick="openLB('studio',1)"><div style="height:100%;background:linear-gradient(150deg,#1A2D5A,#0E1B3A);"></div></div>
+                    <div class="tl-media" style="height:70px;" onclick="openLB('studio',2)"><div style="height:100%;background:linear-gradient(150deg,#F2E8D0,#D8CCAC);"></div></div>
+                  </div>
+                  <div class="tl-cap">Wada study · #c102 Autumn Grove · 6 permutations saved</div>
+                </div>
+              </div>
+              <div class="tl-item reveal" data-ph="final">
+                <div class="tl-head"><span class="phase-tag">Final product</span><span class="tl-date">Jun 2026</span></div>
+                <div class="tl-card">
+                  <div class="tl-media" style="height:150px;" onclick="openLB('final',0)">
+                    <div style="height:100%;background:radial-gradient(ellipse at 40% 35%,#C9955A 0%,transparent 60%),linear-gradient(150deg,#6E4526,#9A6C3E 55%,#4A2F18);"></div>
+                  </div>
+                  <div class="tl-cap">First edition, vegetable-tanned cognac. Brass hardware landed exactly where the sketch wanted it.</div>
+                </div>
+              </div>
+              <div class="tl-item reveal" data-ph="making">
+                <div class="tl-head"><span class="phase-tag">Manufacturing</span><span class="tl-date">Mar 2026</span></div>
+                <div class="tl-note">Sample #2 back from the workshop. Swapped strap hardware to cast brass — stamped read cheap in hand. Stitch density up to 7 SPI on the gusset.</div>
+              </div>
+              <div class="tl-item reveal" data-ph="voice">
+                <div class="tl-head"><span class="phase-tag">Voice note</span><span class="tl-date">Feb 2026</span></div>
+                <div class="voice press" id="vn" onclick="toggleVoice()">
+                  <div class="play" id="vn-play"><svg width="11" height="11" viewBox="0 0 13 13" fill="currentColor"><path d="M3.5 2.2v8.6c0 .5.55.8.97.53l6.4-4.3a.63.63 0 000-1.06l-6.4-4.3a.63.63 0 00-.97.53z"/></svg></div>
+                  <div class="wave" id="wave"></div>
+                  <div class="mono" style="font-size:10px;color:var(--fog);flex-shrink:0;">0:47</div>
+                </div>
+              </div>
+              <div class="tl-item reveal" data-ph="inspo">
+                <div class="tl-head"><span class="phase-tag">Inspiration</span><span class="tl-date">Jan 2026</span></div>
+                <div class="tl-card">
+                  <div class="tl-media" style="height:110px;" onclick="openLB('inspo',0)">
+                    <div style="height:100%;background:radial-gradient(ellipse at 60% 40%,#8E7048,transparent 60%),linear-gradient(150deg,#3A3230,#5E524A);"></div>
+                  </div>
+                  <div class="tl-cap" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <span>ERD hardware weight reference</span>
+                    <span class="mono" style="font-size:8.5px;color:var(--faint);flex-shrink:0;">↗ instagram</span>
+                  </div>
+                </div>
+              </div>
+              <div class="tl-item reveal" data-ph="sketch">
+                <div class="tl-head"><span class="phase-tag">Sketch</span><span class="tl-date">Jan 2026</span></div>
+                <div class="tl-card">
+                  <div class="tl-media" style="height:130px;" onclick="openLB('sketch',0)">
+                    <div style="height:100%;background:linear-gradient(150deg,#FDFCF8,#EFEBE0);position:relative;">
+                      <svg viewBox="0 0 200 100" style="position:absolute;inset:0;width:100%;height:100%;" fill="none">
+                        <ellipse cx="100" cy="58" rx="52" ry="26" stroke="#3A342C" stroke-width="1.3"/>
+                        <path d="M66 46 Q100 18 134 46" stroke="#3A342C" stroke-width="1.3"/>
+                        <line x1="100" y1="32" x2="100" y2="84" stroke="#3A342C" stroke-width=".7" stroke-dasharray="3 3"/>
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="tl-item reveal" data-ph="moodboard">
+                <div class="tl-head"><span class="phase-tag">Mood board</span><span class="tl-date">Nov 2025 · still growing</span></div>
+                <div class="tl-card">
+                  <div class="mood-grid" id="mood-collage"></div>
+                  <div class="tl-cap" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                    <span>Barrel silhouettes, cast brass, saddle stitching.</span>
+                    <span class="mono press" style="font-size:8.5px;color:var(--champagne);flex-shrink:0;" onclick="event.stopPropagation();openCapture();capState('mood')">+ ADD</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="media-wrap" id="detail-media" style="display:none;">
+              <div class="masonry" id="masonry"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- GALLERY -->
+    <section class="view" id="v-gallery">
+      <div class="content">
+        <div class="hdr">
+          <div class="rise">
+            <div class="eyebrow" style="margin-bottom:4px;">The answer to "what do you make?"</div>
+            <div class="syne" style="font-size:28px;font-weight:800;">Gallery</div>
+          </div>
+          <div class="gal-toggle rise" style="animation-delay:.06s;">
+            <button class="gal-mode on" id="gm-stack" onclick="galMode('stack')">Stack</button>
+            <button class="gal-mode" id="gm-ring" onclick="galMode('ring')">Ring</button>
+          </div>
+        </div>
+        <div class="chips">
+          <button class="chip on" onclick="chipOn(this)">Finals · 6</button>
+          <button class="chip" onclick="chipOn(this)">Editorial</button>
+          <button class="chip" onclick="chipOn(this)">Everything</button>
+        </div>
+        <div id="gal-stack">
+          <div class="fan-stage" id="fan-stage"></div>
+          <div class="fan-nav">
+            <button class="glassbtn arrow press" onclick="fanGo(-1)"><svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M9.5 3.5L5.5 7.5l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="fan-count"><span id="fan-idx">01</span> · <span id="fan-name">Barrel Bag 001</span></div>
+            <button class="glassbtn arrow press" onclick="fanGo(1)"><svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M5.5 3.5l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          </div>
+        </div>
+        <div class="ring-stage" id="gal-ring">
+          <div class="ring" id="ring"></div>
+          <div class="ring-center">
+            <div class="eyebrow" style="margin-bottom:5px;">rei by Rei</div>
+            <div class="syne" style="font-size:20px;font-weight:700;">Six finals.<br>One year.</div>
+            <button class="press" style="margin-top:12px;font-family:'DM Mono';font-size:9.5px;letter-spacing:.12em;padding:9px 15px;border-radius:999px;background:var(--ink);color:#FFF;" onclick="openSheet('share')">SHARE THIS</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STUDIO -->
+    <section class="view" id="v-studio">
+      <div class="content">
+        <div class="hdr">
+          <div class="rise">
+            <div class="eyebrow" style="margin-bottom:4px;">和田 · Sanzo Wada · Barrel Bag 001</div>
+            <div class="syne" style="font-size:28px;font-weight:800;">Wada Studio</div>
+          </div>
+          <div class="seg rise" style="animation-delay:.06s;">
+            <button class="on" id="st-1" onclick="studioStep(1)">1 · Regions</button>
+            <button id="st-2" onclick="studioStep(2)">2 · Palette</button>
+            <button id="st-3" onclick="studioStep(3)">3 · Results</button>
+          </div>
+        </div>
+        <div id="studio-edit">
+          <div class="studio-grid">
+            <div class="sg-pal" id="pal-panel" style="display:none;">
+              <div class="eyebrow" style="margin-bottom:8px;">Sanzo Wada · 348 combinations</div>
+              <div class="pal-rail" id="pal-rail"></div>
+            </div>
+            <div class="panel canvas-panel sg-canvas rise">
+              <div class="canvas-bg">
+                <svg id="bag" width="220" height="196" viewBox="0 0 200 190" fill="none" style="max-width:100%;">
+                  <ellipse cx="100" cy="181" rx="58" ry="4" fill="rgba(21,40,74,.1)"/>
+                  <path class="region" id="rg-straps" d="M 62 66 Q 62 22 100 22 Q 138 22 138 66" stroke="#6E5638" stroke-width="5" fill="none" stroke-linecap="round" onclick="cycleRegion('straps')"/>
+                  <path class="region" id="rg-body" d="M 48 68 L 152 68 Q 156 68 156 72 L 158 162 Q 158 168 152 168 L 48 168 Q 42 168 42 162 L 44 72 Q 44 68 48 68 Z" fill="#9A6C3E" onclick="cycleRegion('body')"/>
+                  <path class="region" id="rg-trim" d="M 42 154 L 158 154 L 158 162 Q 158 168 152 168 L 48 168 Q 42 168 42 162 Z" fill="#463424" onclick="cycleRegion('trim')"/>
+                  <rect class="region" id="rg-hardware" x="88" y="110" width="24" height="14" rx="2" fill="#E8D4A8" onclick="cycleRegion('hardware')"/>
+                  <path d="M 48 76 L 152 76" stroke="rgba(21,40,74,.1)" stroke-width=".5" stroke-dasharray="2 2"/>
+                </svg>
+              </div>
+              <div class="legend">
+                <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--indigo);margin-right:4px;"></span>selected</span>
+                <span><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--ink);margin-right:4px;"></span>locked</span>
+                <span id="canvas-hint" style="color:var(--faint);">tap parts to cycle</span>
+              </div>
+            </div>
+            <div class="sg-rail">
+              <div class="panel rise" style="padding:14px;animation-delay:.08s;" id="regions-panel">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:6px;flex-wrap:wrap;">
+                  <div class="eyebrow">Regions</div>
+                  <div class="mono" style="font-size:8px;color:var(--faint);letter-spacing:.08em;">TAP NAME TO FIX</div>
+                </div>
+                <div id="region-rows"></div>
+                <div class="mono" style="font-size:9px;color:var(--faint);line-height:1.7;margin-top:8px;">● green = high confidence · ● amber = check me</div>
+              </div>
+              <div class="panel slot-list rise" id="slots-panel" style="display:none;margin-top:12px;">
+                <div class="eyebrow" style="margin-bottom:10px;">Slot assignment</div>
+                <div id="slot-rows"></div>
+                <button class="gen-btn press" style="margin-top:10px;" onclick="generate()">
+                  <div style="text-align:left;">
+                    <div class="syne" style="font-size:14px;font-weight:600;">Generate colorways</div>
+                    <div class="mono" style="font-size:9px;opacity:.7;margin-top:2px;"><span id="perm-n">6</span> perms · Seedream 5.0 · ~$<span id="perm-cost">0.41</span></div>
+                  </div>
+                  <svg width="16" height="16" viewBox="0 0 17 17" fill="none"><path d="M3.5 8.5h10m0 0l-4-4m4 4l-4 4" stroke="#FFF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <div class="progress-wrap" id="prog" style="display:none;"><div class="progress-bar" id="prog-bar"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="studio-results" style="display:none;">
+          <div class="results-stage" id="res-stage"></div>
+          <div class="fan-nav">
+            <button class="glassbtn arrow press" onclick="resGo(-1)"><svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M9.5 3.5L5.5 7.5l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+            <div class="fan-count"><span id="res-idx">01</span> / <span id="res-total">06</span> · <span id="res-name">Permutation A</span></div>
+            <button class="glassbtn arrow press" onclick="resGo(1)"><svg width="14" height="14" viewBox="0 0 15 15" fill="none"><path d="M5.5 3.5l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+          </div>
+          <div style="text-align:center;margin-top:12px;">
+            <button class="press" style="font-family:'DM Mono';font-size:10px;letter-spacing:.1em;color:var(--fog);padding:9px 15px;border-radius:999px;border:1px solid var(--stroke-strong);" onclick="studioStep(2)">← BACK TO PALETTE</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TABBAR -->
+    <div class="tabbar">
+      <button class="tab on" id="t-home" onclick="nav('home')">
+        <svg width="17" height="17" viewBox="0 0 19 19" fill="none"><path d="M3 8L9.5 2.8L16 8v7.4a1.3 1.3 0 01-1.3 1.3H4.3A1.3 1.3 0 013 15.4V8z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+        <div class="tab-label">Home</div>
+      </button>
+      <button class="tab" id="t-gallery" onclick="nav('gallery')">
+        <svg width="17" height="17" viewBox="0 0 19 19" fill="none"><rect x="2.5" y="2.5" width="14" height="14" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3 13.5L7.5 9.5L11 12.5L13.5 10.5L16 12.8" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+        <div class="tab-label">Gallery</div>
+      </button>
+      <button class="fab" onclick="openCapture()">
+        <svg width="16" height="16" viewBox="0 0 18 18" fill="none"><path d="M9 3.5v11M3.5 9h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <button class="tab" id="t-studio" onclick="nav('studio')">
+        <svg width="17" height="17" viewBox="0 0 19 19" fill="none"><circle cx="9.5" cy="9.5" r="7" stroke="currentColor" stroke-width="1.5"/><circle cx="9.5" cy="9.5" r="2.6" stroke="currentColor" stroke-width="1.4"/></svg>
+        <div class="tab-label">Studio</div>
+      </button>
+      <button class="tab" onclick="toast('Profile — V1.5')">
+        <svg width="17" height="17" viewBox="0 0 19 19" fill="none"><circle cx="9.5" cy="6.5" r="3.2" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 16c.8-3 3.2-4.6 6-4.6s5.2 1.6 6 4.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <div class="tab-label">You</div>
+      </button>
+    </div>
+  </main>
+</div>
+
+<!-- CAPTURE -->
+<div class="sheet-wrap" id="sheet-capture">
+  <div class="backdrop" onclick="closeSheets()"></div>
+  <div class="sheet">
+    <div class="grabber"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;">
+      <div class="syne" style="font-size:18px;font-weight:700;" id="cap-title">Capture</div>
+      <button class="press mono" id="cap-back" style="display:none;font-size:9.5px;letter-spacing:.1em;color:var(--fog);" onclick="capState('menu')">← BACK</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:7px;margin-bottom:14px;flex-wrap:wrap;">
+      <span style="font-size:11.5px;color:var(--fog);">To:</span>
+      <button class="dest-pill press" onclick="toggleDest()">
+        <span id="dest-name">Barrel Bag 001</span>
+        <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2.5 4l2.5 2.5L7.5 4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <div id="cap-body"></div>
+  </div>
+</div>
+
+<!-- SHARE -->
+<div class="sheet-wrap" id="sheet-share">
+  <div class="backdrop" onclick="closeSheets()"></div>
+  <div class="sheet">
+    <div class="grabber"></div>
+    <div class="syne" style="font-size:18px;font-weight:700;margin-bottom:3px;">Share gallery</div>
+    <div style="font-size:12px;color:var(--fog);">A view-only link. No login for whoever you send it to.</div>
+    <div class="share-link">
+      <div class="mono" style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">atelier.app/g/reibyrei-x7k2</div>
+      <button class="press" style="padding:8px 13px;border-radius:11px;background:var(--ink);color:#FFF;font-size:11.5px;font-weight:600;flex-shrink:0;" onclick="copied()">Copy</button>
+    </div>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox">
+  <div class="lb-top">
+    <div class="mono" style="font-size:9.5px;letter-spacing:.14em;" id="lb-phase">MOOD BOARD</div>
+    <button class="press" style="width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.12);color:#FFF;display:flex;align-items:center;justify-content:center;" onclick="closeLB()">✕</button>
+  </div>
+  <div class="lb-stage" id="lb-stage">
+    <div class="lb-edge l" onclick="lbGo(-1)"></div>
+    <div class="lb-edge r" onclick="lbGo(1)"></div>
+  </div>
+  <div class="lb-meta">
+    <div style="font-size:13px;" id="lb-cap">—</div>
+    <div class="lb-src" id="lb-src">—</div>
+    <div class="mono" style="font-size:9.5px;color:rgba(255,255,255,.42);margin-top:8px;"><span id="lb-idx">1</span> / <span id="lb-total">4</span> · swipe or tap edges</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+
+/* ══ data ══ */
+const MEDIA={
+  moodboard:[
+    {art:'radial-gradient(ellipse at 50% 50%,#C9955A,#6E4526)',cap:'Cognac saddle leather',src:'saved from Pinterest',h:150},
+    {art:'linear-gradient(140deg,#D8BC8A,#8E6E3E)',cap:'Cast brass hardware',src:'photo · Canal St walk',h:118},
+    {art:'linear-gradient(160deg,#8E877A,#B4AC9C)',cap:'Barrel silhouette study',src:'shared from Instagram',h:168},
+    {art:'radial-gradient(ellipse at 40% 40%,#B87E48,#4A2F18)',cap:'Saddle stitch density ref',src:'saved from Safari',h:132},
+  ],
+  inspo:[{art:'radial-gradient(ellipse at 60% 40%,#8E7048,transparent 60%),linear-gradient(150deg,#3A3230,#5E524A)',cap:'ERD hardware weight reference',src:'shared from instagram.com',h:158}],
+  sketch:[{art:'linear-gradient(150deg,#FDFCF8,#EFEBE0)',cap:'Gusset + strap-drop sketch',src:'photo of paper sketch',h:126}],
+  final:[{art:'radial-gradient(ellipse at 40% 35%,#C9955A 0%,transparent 60%),linear-gradient(150deg,#6E4526,#9A6C3E 55%,#4A2F18)',cap:'First edition, veg-tan cognac',src:'studio shot',h:172}],
+  studio:[
+    {art:'linear-gradient(150deg,#AE5224,#7A3A18)',cap:'Autumn Grove · Perm A',src:'Wada study',h:140},
+    {art:'linear-gradient(150deg,#1A2D5A,#0E1B3A)',cap:'Autumn Grove · Perm C',src:'Wada study',h:152},
+    {art:'linear-gradient(150deg,#F2E8D0,#D8CCAC)',cap:'Autumn Grove · Perm E',src:'Wada study',h:124},
+  ],
+};
+const HERO=[
+  'radial-gradient(ellipse at 40% 30%,#D0A060 0%,transparent 58%),radial-gradient(ellipse at 75% 75%,#7A4E28 0%,transparent 50%),linear-gradient(155deg,#5E3A1E,#9A6C3E 50%,#3E2814)',
+  'radial-gradient(ellipse at 60% 40%,#C9955A,transparent 62%),linear-gradient(150deg,#4A2F18,#8A5C34)',
+  'linear-gradient(150deg,#FDFCF8,#EFEBE0)',
+  'radial-gradient(ellipse at 50% 50%,#C9955A,#6E4526)',
+  'linear-gradient(150deg,#AE5224,#7A3A18)',
+];
+const DESIGNS=[
+  {name:'Barrel Bag 001',status:'final',sl:'Final',art:'radial-gradient(ellipse at 35% 30%,#C9955A 0%,transparent 60%),linear-gradient(150deg,#6E4526,#9A6C3E 55%,#4A2F18)'},
+  {name:'Mermaid Bag',status:'mfg',sl:'In production',art:'radial-gradient(ellipse at 70% 30%,#9A9AA5 0%,transparent 55%),linear-gradient(160deg,#5A5A64,#82828E 60%,#3E3E48)'},
+  {name:'Sculpt Belt 02',status:'dev',sl:'Developing',art:'radial-gradient(ellipse at 35% 70%,#D0A868 0%,transparent 55%),linear-gradient(140deg,#7E5E2E,#A8863E 55%,#5A4220)'},
+  {name:'Oxblood Card Case',status:'final',sl:'Final',art:'radial-gradient(ellipse at 65% 60%,#A85448 0%,transparent 55%),linear-gradient(150deg,#5E2A22,#8A4438 60%,#421C16)'},
+  {name:'Forest Sling',status:'dev',sl:'Developing',art:'radial-gradient(ellipse at 40% 60%,#6E9A78 0%,transparent 60%),linear-gradient(150deg,#2E4A34,#4E7458,#1E3222)'},
+  {name:'Moto Tote',status:'final',sl:'Final',art:'radial-gradient(ellipse at 60% 30%,#58585E 0%,transparent 50%),linear-gradient(160deg,#131316,#2A2A30 55%,#0B0B0E)'},
+];
+const SCLS={final:'st-final',dev:'st-dev',mfg:'st-mfg'};
+
+/* ══ tilt (gif-style dimensional response) ══ */
+function tilt(el,s=6){
+  if(window.matchMedia('(hover:none)').matches) return;
+  el.addEventListener('mousemove',e=>{
+    const r=el.getBoundingClientRect();
+    const x=(e.clientX-r.left)/r.width-.5, y=(e.clientY-r.top)/r.height-.5;
+    el.style.transform=`perspective(900px) rotateY(${x*s}deg) rotateX(${-y*s}deg) translateY(-3px)`;
+  });
+  el.addEventListener('mouseleave',()=>{el.style.transform='';});
+}
+function initTilt(){ document.querySelectorAll('.tilt').forEach(e=>tilt(e)); }
+
+/* ══ scroll reveal ══ */
+const io=new IntersectionObserver(es=>{
+  es.forEach((e,i)=>{ if(e.isIntersecting){ setTimeout(()=>e.target.classList.add('in'), i*60); io.unobserve(e.target);} });
+},{threshold:.12,rootMargin:'0px 0px -40px 0px'});
+function observeReveals(){ document.querySelectorAll('.reveal:not(.in)').forEach(e=>io.observe(e)); }
+
+/* ══ nav ══ */
+const views=['home','project','design','gallery','studio'];
+function nav(v){
+  views.forEach(x=>$('v-'+x).classList.remove('active'));
+  $('v-'+v).classList.add('active');
+  ['home','gallery','studio'].forEach(t=>$('t-'+t)?.classList.remove('on'));
+  ({home:'t-home',project:'t-home',design:'t-home',gallery:'t-gallery',studio:'t-studio'})[v] &&
+    $(({home:'t-home',project:'t-home',design:'t-home',gallery:'t-gallery',studio:'t-studio'})[v])?.classList.add('on');
+  document.querySelectorAll('.snav').forEach(s=>s.classList.remove('on'));
+  document.querySelector(`.snav[data-nav="${({home:'home',project:'home',design:'home',gallery:'gallery',studio:'studio'})[v]}"]`)?.classList.add('on');
+  window.scrollTo({top:0});
+  if(v==='gallery') renderFan();
+  if(v==='design') requestAnimationFrame(observeReveals);
+  // replay entrance
+  $('v-'+v).querySelectorAll('.rise').forEach(e=>{e.style.animation='none';void e.offsetWidth;e.style.animation='';});
+  requestAnimationFrame(initTilt);
+}
+function chipOn(el){el.parentElement.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');}
+
+/* ══ project grid ══ */
+let projF='all';
+function renderGrid(){
+  const vis=DESIGNS.map((d,i)=>({d,i})).filter(x=>projF==='all'||x.d.status===projF);
+  $('dgrid').innerHTML=vis.map(({d,i},k)=>`
+    <div class="dcard tilt" style="animation:tileIn .55s var(--ease) both;animation-delay:${k*.06}s;" onclick="nav('design')">
+      <div class="card-idx">${String(i+1).padStart(3,'0')}</div>
+      <div class="art" style="background:${d.art};"></div>
+      <div class="label"><div class="dname">${d.name}</div>
+        <div class="dstatus ${SCLS[d.status]}"><span class="dot"></span>${d.sl}</div></div>
+    </div>`).join('');
+  requestAnimationFrame(initTilt);
+}
+function projFilter(f,el){ projF=f; chipOn(el); renderGrid(); }
+
+/* ══ hero + rail (gif 2) ══ */
+let heroIdx=0, heroA=true;
+function renderRail(){
+  $('hero-rail').innerHTML=HERO.map((a,i)=>`
+    <div class="rail-item ${i===heroIdx?'on':''}" style="background:${a};" onclick="setHero(${i})"><i></i></div>`).join('');
+}
+function setHero(i){
+  if(i===heroIdx) return;
+  heroIdx=i;
+  const inEl=heroA?$('hero-b'):$('hero-a'), outEl=heroA?$('hero-a'):$('hero-b');
+  inEl.style.background=HERO[i]; inEl.classList.remove('out'); outEl.classList.add('out');
+  heroA=!heroA;
+  renderRail();
+}
+
+/* ══ detail view toggle ══ */
+let curPhase='all';
+function detailView(m){
+  $('dv-timeline').classList.toggle('on',m==='timeline');
+  $('dv-media').classList.toggle('on',m==='media');
+  $('detail-timeline').style.display=m==='timeline'?'block':'none';
+  $('detail-media').style.display=m==='media'?'block':'none';
+  if(m==='media') renderMasonry(); else observeReveals();
+  updateCount();
+}
+function phaseFilter(ph,el){
+  curPhase=ph; chipOn(el);
+  document.querySelectorAll('#detail-timeline .tl-item').forEach(it=>{
+    const show=(ph==='all'||it.dataset.ph===ph);
+    it.classList.toggle('gone',!show);
+    if(show){ it.classList.remove('in'); }
+  });
+  observeReveals();
+  if($('detail-media').style.display!=='none') renderMasonry(true);
+  updateCount();
+}
+function mediaItems(){
+  const out=[];
+  Object.entries(MEDIA).forEach(([ph,arr])=>{
+    if(curPhase==='all'||curPhase===ph) arr.forEach((m,i)=>out.push({...m,ph,i}));
+  });
+  return out;
+}
+function updateCount(){
+  if($('detail-media').style.display!=='none'){ $('dv-count').textContent=mediaItems().length+' media'; }
+  else{
+    const n=[...document.querySelectorAll('#detail-timeline .tl-item')].filter(i=>!i.classList.contains('gone')).length;
+    $('dv-count').textContent=n+' entries';
+  }
+}
+/* Masonry: only rebuild when the FILTER changes. Toggling Timeline↔Media
+   with the same filter reuses the existing tiles — no re-cascade. */
+let masonryKey=null;
+function renderMasonry(force=false){
+  const key=curPhase;
+  if(!force && key===masonryKey && $('masonry').children.length) return;
+  masonryKey=key;
+  const items=mediaItems();
+  $('masonry').innerHTML=items.length?items.map((m,k)=>`
+    <div class="m-tile" style="animation-delay:${k*.05}s;" onclick="openLB('${m.ph}',${m.i})">
+      <div class="m-art" style="height:${m.h}px;background:${m.art};"></div>
+      <div class="m-shine"></div>
+      <div class="m-open"><svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 8L8 2M8 2H4M8 2v4" stroke="#17181D" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div class="m-tag">${m.ph}</div>
+    </div>`).join('')
+    :'<div class="mono" style="font-size:10.5px;color:var(--faint);padding:18px 4px;">Nothing here yet.</div>';
+  document.querySelectorAll('.m-tile').forEach(t=>{
+    t.addEventListener('mousemove',e=>{
+      const r=t.getBoundingClientRect();
+      t.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');
+      t.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%');
+      const x=(e.clientX-r.left)/r.width-.5, y=(e.clientY-r.top)/r.height-.5;
+      t.style.transform=`perspective(800px) rotateY(${x*5}deg) rotateX(${-y*5}deg) translateY(-4px)`;
+    });
+    t.addEventListener('mouseleave',()=>{t.style.transform='';});
+  });
+}
+
+/* ══ moodboard collage ══ */
+$('mood-collage').innerHTML=MEDIA.moodboard.map((m,i)=>
+  `<div style="background:${m.art};" onclick="openLB('moodboard',${i})"></div>`).join('');
+
+/* ══ lightbox ══ */
+let lbSet=[],lbIdx=0;
+function openLB(ph,i){
+  lbSet=MEDIA[ph]||[]; lbIdx=Math.min(i,lbSet.length-1);
+  $('lb-phase').textContent=ph.toUpperCase();
+  $('lightbox').classList.add('open');
+  buildLB();
+}
+function buildLB(){
+  [...$('lb-stage').querySelectorAll('.lb-img')].forEach(e=>e.remove());
+  lbSet.forEach(m=>{
+    const d=document.createElement('div'); d.className='lb-img'; d.style.background=m.art;
+    $('lb-stage').appendChild(d);
+  });
+  let sx=null;
+  $('lb-stage').onpointerdown=e=>sx=e.clientX;
+  $('lb-stage').onpointerup=e=>{if(sx===null)return;const dx=e.clientX-sx;if(Math.abs(dx)>44)lbGo(dx<0?1:-1);sx=null;};
+  layoutLB();
+}
+function layoutLB(){
+  const k=$('lb-stage').querySelectorAll('.lb-img');
+  k.forEach((el,i)=>{
+    const off=i-lbIdx;
+    el.style.transform=`translateX(${off*104}%) scale(${off===0?1:.9})`;
+    el.style.opacity=Math.abs(off)>1?0:1;
+  });
+  const m=lbSet[lbIdx];
+  $('lb-cap').textContent=m.cap; $('lb-src').textContent=m.src;
+  $('lb-idx').textContent=lbIdx+1; $('lb-total').textContent=lbSet.length;
+}
+function lbGo(d){ lbIdx=Math.max(0,Math.min(lbSet.length-1,lbIdx+d)); layoutLB(); }
+function closeLB(){ $('lightbox').classList.remove('open'); }
+
+/* ══ voice ══ */
+[8,14,20,26,18,12,22,28,16,10,18,24,14,8,16,26,20,12,24,18,10,14,22,16].forEach((h,i)=>{
+  const b=document.createElement('i'); b.style.height=h+'px'; b.style.animationDelay=(i*.045)+'s'; $('wave').appendChild(b);
+});
+let vp=false;
+function toggleVoice(){
+  vp=!vp; $('vn').classList.toggle('playing',vp);
+  $('vn-play').innerHTML=vp
+    ?'<svg width="10" height="10" viewBox="0 0 12 12" fill="currentColor"><rect x="2" y="1.5" width="2.8" height="9" rx="1"/><rect x="7.2" y="1.5" width="2.8" height="9" rx="1"/></svg>'
+    :'<svg width="11" height="11" viewBox="0 0 13 13" fill="currentColor"><path d="M3.5 2.2v8.6c0 .5.55.8.97.53l6.4-4.3a.63.63 0 000-1.06l-6.4-4.3a.63.63 0 00-.97.53z"/></svg>';
+}
+
+/* ══ gallery fan (gif 4) ══ */
+let fanIdx=0,fanBuilt=false;
+function renderFan(){
+  const st=$('fan-stage');
+  if(!fanBuilt){
+    DESIGNS.forEach((f,i)=>{
+      const c=document.createElement('div'); c.className='fan-card';
+      c.innerHTML=`<div class="fan-art" style="background:${f.art};"></div>
+        <div style="position:absolute;inset:0;background:linear-gradient(180deg,transparent 55%,rgba(20,14,8,.55));"></div>
+        <div class="fan-label"><div class="mono" style="font-size:8.5px;letter-spacing:.16em;opacity:.8;">${String(i+1).padStart(3,'0')} · ${f.sl.toUpperCase()}</div>
+        <div class="syne" style="font-size:16px;font-weight:700;margin-top:2px;">${f.name}</div></div>`;
+      c.onclick=()=>{ i===fanIdx ? nav('design') : (fanIdx=i,layoutFan()); };
+      st.appendChild(c);
+    });
+    let sx=null;
+    st.addEventListener('pointerdown',e=>sx=e.clientX);
+    st.addEventListener('pointerup',e=>{if(sx===null)return;const dx=e.clientX-sx;if(Math.abs(dx)>44)fanGo(dx<0?1:-1);sx=null;});
+    fanBuilt=true;
+  }
+  layoutFan();
+}
+function layoutFan(){
+  const c=$('fan-stage').children;
+  for(let i=0;i<c.length;i++){
+    const off=i-fanIdx, a=Math.abs(off);
+    c[i].style.transform=`translateX(${off*42}%) scale(${Math.max(.72,1-a*.12)}) rotateY(${off*-10}deg)`;
+    c[i].style.opacity=a>2?0:1-a*.26;
+    c[i].style.zIndex=100-a;
+    c[i].style.filter=a===0?'none':'saturate(.8) brightness(.96)';
+    c[i].style.pointerEvents=a>2?'none':'auto';
+    c[i].classList.toggle('center',a===0);
+  }
+  $('fan-idx').textContent=String(fanIdx+1).padStart(2,'0');
+  $('fan-name').textContent=DESIGNS[fanIdx].name;
+}
+function fanGo(d){ fanIdx=Math.max(0,Math.min(DESIGNS.length-1,fanIdx+d)); layoutFan(); }
+
+/* ══ gallery ring (gif 1) ══ */
+function galMode(m){
+  $('gm-stack').classList.toggle('on',m==='stack');
+  $('gm-ring').classList.toggle('on',m==='ring');
+  $('gal-stack').style.display=m==='stack'?'block':'none';
+  $('gal-ring').style.display=m==='ring'?'flex':'none';
+  if(m==='ring'&&!$('ring').children.length){
+    const w=$('gal-ring').clientWidth||window.innerWidth;
+    const R=Math.min(215,(Math.min(w,window.innerWidth)-125)/2);
+    $('ring').style.width=(R*2+52)+'px'; $('ring').style.height=(R*2+52)+'px';
+    const N=16;
+    for(let i=0;i<N;i++){
+      const a=(i/N)*Math.PI*2;
+      const it=document.createElement('div'); it.className='ring-item';
+      it.style.transform=`translate(${Math.cos(a)*R}px,${Math.sin(a)*R}px)`;
+      const f=DESIGNS[i%DESIGNS.length];
+      it.innerHTML=`<div style="background:${f.art};"></div>`;
+      it.onclick=()=>{ fanIdx=i%DESIGNS.length; galMode('stack'); layoutFan(); };
+      $('ring').appendChild(it);
+    }
+  }
+}
+
+/* ══ studio ══ */
+const REGIONS=[
+  {id:'body',label:'Leather body',state:'sel',conf:'hi'},
+  {id:'hardware',label:'Brass hardware',state:'sel',conf:'hi'},
+  {id:'straps',label:'Straps',state:'sel',conf:'hi'},
+  {id:'trim',label:'Trim + binding',state:'lock',conf:'mid'},
+];
+const BASE={body:'#9A6C3E',hardware:'#E8D4A8',straps:'#6E5638',trim:'#463424'};
+const PALETTES=[
+  {id:'c102',name:'Autumn Grove',colors:[{n:'Burnt Sienna',h:'#AE5224'},{n:'Prussian Blue',h:'#1A2D5A'},{n:'Warm Ivory',h:'#F2E8D0'}]},
+  {id:'c223',name:'Kyoto Dusk',colors:[{n:'Indigo',h:'#3D3B8E'},{n:'Aged Gold',h:'#B89968'},{n:'Obsidian',h:'#26262C'}]},
+  {id:'c087',name:'Winter Camellia',colors:[{n:'Dusty Rose',h:'#C89B9B'},{n:'Teal Shadow',h:'#2C4F4D'},{n:'Cream',h:'#F0E8D4'}]},
+  {id:'c301',name:'Lacquer & Gold',colors:[{n:'Deep Crimson',h:'#7A1F1F'},{n:'Gold',h:'#B89968'},{n:'Ink',h:'#17171B'}]},
+  {id:'c194',name:'Spring Mist',colors:[{n:'Sakura',h:'#E8B4C0'},{n:'Sea Foam',h:'#A8CEC7'},{n:'Pearl',h:'#F2EFE4'}]},
+  {id:'c045',name:'Moss Lacquer',colors:[{n:'Deep Forest',h:'#2D4A2B'},{n:'Vermillion',h:'#C44536'},{n:'Bone',h:'#EDE6D4'}]},
+];
+let curStep=1,curPal=0,results=[],resIdx=0;
+/* ── Region rows: BUILD ONCE, then mutate in place.
+   Rebuilding innerHTML on every click re-fires the entrance animation on
+   every row and kills the key-press transition on the one you struck. ── */
+let rowsBuilt=false;
+function buildRegionRows(){
+  $('region-rows').innerHTML=REGIONS.map((r,k)=>`
+    <div class="region-row ${r.state}" id="row-${r.id}" style="animation:riseIn .45s var(--ease) both;animation-delay:${k*.05}s;" onclick="cycleRegion('${r.id}')">
+      <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+        <div class="conf ${r.conf}" id="conf-${r.id}"></div>
+        <div style="width:20px;height:20px;border-radius:6px;background:${BASE[r.id]};border:1px solid var(--stroke);flex-shrink:0;"></div>
+        <span class="rr-label" id="lbl-${r.id}" style="font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" onclick="event.stopPropagation();renameRegion('${r.id}')"></span>
+      </div>
+      <span class="rr-state ${r.state}" id="rs-${r.id}"></span>
+    </div>`).join('');
+  rowsBuilt=true;
+  updateRegionRows();
+}
+function updateRegionRows(){
+  REGIONS.forEach(r=>{
+    const row=$('row-'+r.id), rs=$('rs-'+r.id), lbl=$('lbl-'+r.id), cf=$('conf-'+r.id);
+    if(!row) return;
+    // only touch what changed — no DOM replacement, no re-animation
+    row.classList.toggle('sel', r.state==='sel');
+    row.classList.toggle('lock', r.state==='lock');
+    rs.classList.toggle('sel', r.state==='sel');
+    rs.classList.toggle('lock', r.state==='lock');
+    rs.classList.toggle('none', r.state==='none');
+    rs.textContent = r.state==='sel'?'select' : r.state==='lock'?'locked' : '—';
+    lbl.innerHTML = r.label + (r.conf==='mid'?' <span class="mono" style="font-size:8px;color:var(--champagne);">?</span>':'');
+    cf.className = 'conf '+r.conf;
+  });
+  applyRegionStyles();
+}
+function renameRegion(id){
+  const r=REGIONS.find(x=>x.id===id);
+  const nn=prompt('Rename region',r.label);
+  if(nn){ r.label=nn; r.conf='hi'; updateRegionRows(); if(curStep>=2)syncSlots(); toast('Label fixed'); }
+}
+function applyRegionStyles(){
+  REGIONS.forEach(r=>{
+    const el=$('rg-'+r.id);
+    el.classList.toggle('sel',r.state==='sel');
+    el.style.opacity=r.state==='none'?.4:1;
+  });
+}
+function cycleRegion(id){
+  const r=REGIONS.find(x=>x.id===id);
+  r.state=r.state==='sel'?'lock':r.state==='lock'?'none':'sel';
+  const el=$('rg-'+id); el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+  updateRegionRows();                       // ← mutate, don't rebuild
+  if(curStep>=2){ syncSlots(); applyPalette(); }
+}
+const selRegions=()=>REGIONS.filter(r=>r.state==='sel');
+
+/* ── Palette rail: build once, latch in place ── */
+let palBuilt=false;
+function buildPalRail(){
+  if(palBuilt) return;
+  $('pal-rail').innerHTML=PALETTES.map((p,i)=>`
+    <div class="pal-card ${i===curPal?'on':''}" id="pal-${i}" style="animation:riseIn .5s var(--ease) both;animation-delay:${i*.04}s;" onclick="pickPal(${i})">
+      <div class="pal-blocks">${p.colors.map(c=>`<div style="background:${c.h};"></div>`).join('')}</div>
+      <div class="pal-name">${p.name}</div>
+      <div class="pal-id">#${p.id} · ${p.colors.length}-color</div>
+    </div>`).join('');
+  palBuilt=true;
+}
+function updatePalRail(){
+  PALETTES.forEach((p,i)=>$('pal-'+i)?.classList.toggle('on', i===curPal));
+}
+function pickPal(i){
+  curPal=i;
+  updatePalRail();            // ← only the latch state changes
+  syncSlots();
+  applyPalette();
+}
+function applyPalette(){
+  const sel=selRegions(), cols=PALETTES[curPal].colors;
+  REGIONS.forEach(r=>$('rg-'+r.id).setAttribute(r.id==='straps'?'stroke':'fill',BASE[r.id]));
+  sel.forEach((r,i)=>{
+    const c=cols[i%cols.length];
+    const el=$('rg-'+r.id);
+    el.setAttribute(r.id==='straps'?'stroke':'fill',c.h);
+    el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+  });
+}
+
+/* ── Slots: reconcile. Rebuild only when the row COUNT changes
+   (a region was added/removed). Otherwise mutate the existing rows. ── */
+function syncSlots(){
+  const sel=selRegions(), cols=PALETTES[curPal].colors;
+  const host=$('slot-rows');
+  const existing=[...host.children];
+
+  if(existing.length !== sel.length){
+    host.innerHTML=sel.map((r,i)=>{const c=cols[i%cols.length];return`
+      <div class="slot-row" id="slot-${i}" style="animation-delay:${i*.05}s;">
+        <div class="slot-swatch" id="sw-${i}" style="background:${c.h};"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:500;" id="sn-${i}">${r.label}</div>
+          <div class="mono" style="font-size:9px;color:var(--faint);margin-top:1px;" id="sc-${i}">${c.n} · ${c.h.toUpperCase()}</div>
+        </div>
+        <span class="mono" style="font-size:8.5px;color:var(--faint);">SLOT ${i+1}</span>
+      </div>`;}).join('');
+  } else {
+    sel.forEach((r,i)=>{
+      const c=cols[i%cols.length];
+      const sw=$('sw-'+i), sn=$('sn-'+i), sc=$('sc-'+i);
+      if(sw) sw.style.background=c.h;      // swatch cross-fades via CSS transition
+      if(sn) sn.textContent=r.label;
+      if(sc) sc.textContent=`${c.n} · ${c.h.toUpperCase()}`;
+    });
+  }
+  const n=Math.min(fact(sel.length),12);
+  $('perm-n').textContent=n; $('perm-cost').textContent=(n*.0675).toFixed(2);
+}
+const fact=n=>n<=1?1:n*fact(n-1);
+function studioStep(s){
+  curStep=s;
+  [1,2,3].forEach(i=>{
+    $('st-'+i).classList.toggle('on',i===s);
+    $('st-'+i).classList.toggle('done',i<s);   // the key remembers it was pressed
+  });
+  $('studio-edit').style.display=s<3?'block':'none';
+  $('studio-results').style.display=s===3?'block':'none';
+  $('pal-panel').style.display=s>=2?'block':'none';
+  $('slots-panel').style.display=s>=2?'block':'none';
+  $('regions-panel').style.display=s===1?'block':'none';
+  $('canvas-hint').textContent=s===1?'tap parts to cycle':'live preview · swipe palettes';
+  if(s>=2){ buildPalRail(); updatePalRail(); syncSlots(); applyPalette(); }
+  if(s===3&&!results.length) buildResults();
+}
+function generate(){
+  $('prog').style.display='block';
+  let p=0;
+  const iv=setInterval(()=>{
+    p+=Math.random()*22+10; $('prog-bar').style.width=Math.min(p,100)+'%';
+    if(p>=100){ clearInterval(iv); setTimeout(()=>{$('prog').style.display='none';$('prog-bar').style.width='0';buildResults();studioStep(3);},280); }
+  },360);
+}
+function permute(a){ if(a.length<=1)return[a]; const o=[];
+  a.forEach((x,i)=>permute([...a.slice(0,i),...a.slice(i+1)]).forEach(r=>o.push([x,...r]))); return o; }
+function buildResults(){
+  const sel=selRegions(), cols=PALETTES[curPal].colors.slice(0,sel.length);
+  const perms=permute(cols).slice(0,12);
+  results=perms; resIdx=0;
+  $('res-stage').innerHTML='';
+  perms.forEach((perm,pi)=>{
+    const f={...BASE};
+    sel.forEach((r,i)=>f[r.id]=perm[i%perm.length].h);
+    const c=document.createElement('div'); c.className='res-card';
+    c.innerHTML=`
+      <div class="res-art">
+        <svg width="100%" viewBox="0 0 200 190" fill="none">
+          <ellipse cx="100" cy="181" rx="58" ry="4" fill="rgba(21,40,74,.1)"/>
+          <path d="M 62 66 Q 62 22 100 22 Q 138 22 138 66" stroke="${f.straps}" stroke-width="5" fill="none" stroke-linecap="round"/>
+          <path d="M 48 68 L 152 68 Q 156 68 156 72 L 158 162 Q 158 168 152 168 L 48 168 Q 42 168 42 162 L 44 72 Q 44 68 48 68 Z" fill="${f.body}"/>
+          <path d="M 42 154 L 158 154 L 158 162 Q 158 168 152 168 L 48 168 Q 42 168 42 162 Z" fill="${f.trim}"/>
+          <rect x="88" y="110" width="24" height="14" rx="2" fill="${f.hardware}"/>
+        </svg>
+      </div>
+      <div class="res-meta">
+        <div class="res-chips">${perm.map(c=>`<span style="background:${c.h};"></span>`).join('')}</div>
+        <div class="syne" style="font-size:13.5px;font-weight:600;">Permutation ${String.fromCharCode(65+pi)}</div>
+        <div class="mono" style="font-size:8.5px;color:var(--faint);margin:2px 0 9px;">#${PALETTES[curPal].id} · ${perm.map(c=>c.n).join(' / ')}</div>
+        <button class="save-btn press" onclick="event.stopPropagation();saveRes(this)">Save to timeline</button>
+      </div>`;
+    c.onclick=e=>{ if(e.target.tagName!=='BUTTON'&&pi!==resIdx){resIdx=pi;layoutRes();} };
+    $('res-stage').appendChild(c);
+  });
+  let sx=null;
+  $('res-stage').onpointerdown=e=>sx=e.clientX;
+  $('res-stage').onpointerup=e=>{if(sx===null)return;const dx=e.clientX-sx;if(Math.abs(dx)>44)resGo(dx<0?1:-1);sx=null;};
+  $('res-total').textContent=String(perms.length).padStart(2,'0');
+  layoutRes();
+}
+function layoutRes(){
+  const c=$('res-stage').children;
+  for(let i=0;i<c.length;i++){
+    const off=i-resIdx,a=Math.abs(off);
+    c[i].style.transform=`translateX(${off*48}%) scale(${Math.max(.7,1-a*.13)}) rotateY(${off*-9}deg)`;
+    c[i].style.opacity=a>2?0:1-a*.28;
+    c[i].style.zIndex=100-a;
+    c[i].style.pointerEvents=a>2?'none':'auto';
+  }
+  $('res-idx').textContent=String(resIdx+1).padStart(2,'0');
+  $('res-name').textContent='Permutation '+String.fromCharCode(65+resIdx);
+}
+function resGo(d){ resIdx=Math.max(0,Math.min(results.length-1,resIdx+d)); layoutRes(); }
+function saveRes(b){ b.classList.add('saved'); b.textContent='Saved ✓'; toast('Saved to Barrel Bag 001 timeline'); }
+
+/* ══ capture ══ */
+let dest='Barrel Bag 001', mbSel=new Set([0,1,2]);
+const MB=['radial-gradient(ellipse at 50% 50%,#C9955A,#6E4526)','linear-gradient(140deg,#D8BC8A,#8E6E3E)','linear-gradient(160deg,#8E877A,#B4AC9C)','radial-gradient(ellipse at 40% 40%,#B87E48,#4A2F18)','linear-gradient(150deg,#5E5A64,#8A8694)','radial-gradient(ellipse at 60% 40%,#A85448,#421C16)'];
+function toggleDest(){ dest=dest==='Inbox'?'Barrel Bag 001':'Inbox'; $('dest-name').textContent=dest; }
+function openCapture(){ capState('menu'); $('sheet-capture').classList.add('open'); }
+function capState(s){
+  $('cap-back').style.display=s==='menu'?'none':'block';
+  const b=$('cap-body');
+  if(s==='menu'){ $('cap-title').textContent='Capture';
+    b.innerHTML=`<div class="cap-row">
+      <button class="cap-opt press" onclick="capState('photo')"><div style="font-size:18px;">📷</div><div class="t">Photo</div></button>
+      <button class="cap-opt press" onclick="capState('mood')"><div style="font-size:18px;">🖼</div><div class="t">Mood</div></button>
+      <button class="cap-opt press" onclick="capState('note')"><div style="font-size:18px;">✏️</div><div class="t">Note</div></button>
+      <button class="cap-opt press" onclick="capState('voice')"><div style="font-size:18px;">🎙</div><div class="t">Voice</div></button>
+      <button class="cap-opt press" onclick="capState('inspo')"><div style="font-size:18px;">✨</div><div class="t">Inspo</div></button>
+    </div>
+    <div class="mono" style="font-size:9px;color:var(--faint);line-height:1.8;margin-top:14px;">TIP · Share to Atelier from Instagram or Safari<br>and it lands in Inspo automatically.</div>`;}
+  if(s==='mood'){ $('cap-title').textContent='Mood board';
+    b.innerHTML=`<div style="font-size:12px;color:var(--fog);">Multi-select. Boards keep growing — add anytime.</div>
+      <div class="mb-pick">${MB.map((t,i)=>`<div class="mb-thumb ${mbSel.has(i)?'sel':''}" style="background:${t};" onclick="mbToggle(this,${i})"><div class="mb-check">✓</div></div>`).join('')}</div>
+      <button class="primary-btn press" id="mb-add" onclick="captured('Mood board · '+mbSel.size+' images')">Add ${mbSel.size} images → ${dest}</button>`;}
+  if(s==='note'){ $('cap-title').textContent='Note';
+    b.innerHTML=`<textarea class="field" placeholder="Strap drop feels 2cm too long on the sample…"></textarea>
+      <button class="primary-btn press" onclick="captured('Note')">Save note → ${dest}</button>`;}
+  if(s==='voice'){ $('cap-title').textContent='Voice note';
+    b.innerHTML=`<button class="rec-circle press" id="rec" onclick="recToggle()"><svg width="20" height="20" viewBox="0 0 22 22" fill="currentColor"><rect x="8" y="3" width="6" height="11" rx="3"/><path d="M5 11a6 6 0 0012 0M11 17v3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></button>
+      <div class="mono" style="text-align:center;font-size:10.5px;color:var(--fog);" id="rec-t">tap to record</div>
+      <button class="primary-btn press" onclick="captured('Voice note')">Save → ${dest}</button>`;}
+  if(s==='inspo'){ $('cap-title').textContent='Inspiration';
+    b.innerHTML=`<div style="font-size:12px;color:var(--fog);">One image or link, source kept.</div>
+      <input class="field" placeholder="Paste a link or image…">
+      <input class="field" placeholder="Why it matters (optional)">
+      <button class="primary-btn press" onclick="captured('Inspiration')">Save → ${dest}</button>`;}
+  if(s==='photo'){ $('cap-title').textContent='Photo';
+    b.innerHTML=`<div style="display:flex;gap:9px;margin-top:4px;">
+      <button class="cap-opt press" style="flex:1;padding:20px 8px;" onclick="captured('Photo')"><div style="font-size:19px;">📸</div><div class="t">Camera</div></button>
+      <button class="cap-opt press" style="flex:1;padding:20px 8px;" onclick="captured('Photo')"><div style="font-size:19px;">🗂</div><div class="t">Library</div></button>
+    </div>`;}
+}
+function mbToggle(el,i){ mbSel.has(i)?mbSel.delete(i):mbSel.add(i); el.classList.toggle('sel');
+  const b=$('mb-add'); if(b) b.textContent=`Add ${mbSel.size} images → ${dest}`; }
+let recOn=false;
+function recToggle(){ recOn=!recOn; $('rec').classList.toggle('rec',recOn); $('rec-t').textContent=recOn?'recording… tap to stop':'tap to record'; }
+
+/* ══ sheets/toast ══ */
+function openSheet(w){ $('sheet-'+w).classList.add('open'); }
+function closeSheets(){ document.querySelectorAll('.sheet-wrap').forEach(s=>s.classList.remove('open')); }
+function captured(k){ closeSheets(); toast(k+' → '+dest); }
+function copied(){ closeSheets(); toast('Link copied'); }
+let tt; function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('show'),1900); }
+
+/* ══════════════════════════════════════════════════════════
+   KEY STRIKE — audio + haptics
+   A real switch has a transient (a clack), not a beep:
+   a short filtered noise burst with a fast exponential decay.
+   ══════════════════════════════════════════════════════════ */
+let actx=null, sndOn=false;
+function toggleSound(){
+  sndOn=!sndOn;
+  if(sndOn && !actx) actx=new (window.AudioContext||window.webkitAudioContext)();
+  const w=$('snd-wave');
+  if(w) w.setAttribute('opacity', sndOn?'1':'0.25');
+  $('snd-btn').classList.toggle('on',sndOn);
+  strike(sndOn?760:340);
+  toast(sndOn?'Key click on':'Key click off');
+}
+function strike(freq=650, gain=0.14){
+  if(!sndOn||!actx) return;
+  const t=actx.currentTime;
+  const buf=actx.createBuffer(1, Math.floor(actx.sampleRate*0.03), actx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,7);
+  const src=actx.createBufferSource(); src.buffer=buf;
+  const bp=actx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=freq; bp.Q.value=1.2;
+  const g=actx.createGain();
+  g.gain.setValueAtTime(gain,t);
+  g.gain.exponentialRampToValueAtTime(0.001,t+0.035);
+  src.connect(bp).connect(g).connect(actx.destination);
+  src.start(t); src.stop(t+0.04);
+}
+function haptic(ms=8){ if(navigator.vibrate) navigator.vibrate(ms); }
+
+/* Delegate the strike to every key in the app. Pitch varies by mass:
+   big keys thud low, small keys tick high. */
+const KEY_SEL='.chip,.seg button,.gal-mode,.fab,.glassbtn,.arrow,.gen-btn,.primary-btn,'+
+  '.action,.pal-card,.region-row,.rail-item,.save-btn,.cap-opt,.dest-pill,.tab,.snav';
+document.addEventListener('pointerdown',e=>{
+  const k=e.target.closest(KEY_SEL);
+  if(!k) return;
+  let f=650, g=0.14, h=8;
+  if(k.matches('.gen-btn,.primary-btn,.fab')){ f=430; g=0.18; h=12; }      // heavy key, low thud
+  else if(k.matches('.chip,.save-btn,.dest-pill,.rail-item')){ f=820; g=0.11; h=6; } // light tick
+  else if(k.matches('.pal-card,.region-row,.action')){ f=600; g=0.13; h=9; }
+  strike(f,g); haptic(h);
+});
+
+/* ══ init ══ */
+$('hero-a').style.background=HERO[0];
+renderRail(); renderGrid(); buildRegionRows(); studioStep(1);
+renderMasonry(); updateCount(); observeReveals(); initTilt();
+document.addEventListener('keydown',e=>{
+  if($('lightbox').classList.contains('open')){
+    if(e.key==='ArrowRight')lbGo(1); if(e.key==='ArrowLeft')lbGo(-1); if(e.key==='Escape')closeLB();
+  } else if($('v-gallery').classList.contains('active')){
+    if(e.key==='ArrowRight')fanGo(1); if(e.key==='ArrowLeft')fanGo(-1);
+  }
+});
+</script>
+</body>
+</html>

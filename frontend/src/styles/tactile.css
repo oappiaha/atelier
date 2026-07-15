@@ -1,0 +1,196 @@
+/* ══════════════════════════════════════════════════════════
+   TACTILE LAYER — every control becomes a key.
+   Rules: travel (never scale) · fast down, springy up ·
+   the side wall collapses on strike · light always from above ·
+   selected = latched (stays depressed).
+   Lifted verbatim from atelier_light_v3.html.
+   ══════════════════════════════════════════════════════════ */
+
+/* ── filter keys: latching bank ── */
+.chip{
+  background:var(--key-face);border:1px solid var(--key-rim);
+  box-shadow:var(--sh-up);
+  transform:translateY(0);
+  transition:transform var(--up),box-shadow var(--up),background .3s ease,color .3s ease;
+}
+.chip:hover{background:var(--key-face-hi);}
+.chip:active{transform:translateY(var(--travel));box-shadow:var(--sh-down);
+  transition:transform var(--down),box-shadow var(--down);}
+.chip.on{
+  color:#FFF;background:var(--key-dark);border-color:var(--key-rim-dark);
+  transform:translateY(2px);box-shadow:var(--sh-latch);
+  text-shadow:0 1px 0 rgba(0,0,0,.4);
+}
+.chip.on:active{transform:translateY(4px);}
+
+/* ── segmented housing: active key rises OUT of the well ── */
+.seg,.gal-toggle{
+  background:var(--bg-deep);border:1px solid var(--stroke);box-shadow:var(--sh-well);
+}
+.seg button,.gal-mode{
+  background:transparent;border:1px solid transparent;
+  transition:all var(--up);
+}
+.seg button:active,.gal-mode:active{transform:translateY(1px);transition:all var(--down);}
+.seg button.on,.gal-mode.on{
+  color:var(--ink);background:var(--key-face);border-color:var(--key-rim);
+  box-shadow:0 1px 0 0 var(--key-rim),0 3px 6px -1px var(--key-cast),inset 0 1px 0 0 var(--key-lip);
+  transform:translateY(-1px);
+}
+/* studio step keys keep the dark latch */
+.seg button.latch.on{
+  color:#FFF;background:var(--key-dark);border-color:var(--key-rim-dark);
+  box-shadow:0 1px 3px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.12);
+  text-shadow:0 1px 0 rgba(0,0,0,.4);transform:translateY(0);
+}
+.seg button.done{color:var(--accent);}
+
+/* ── the dome: capture FAB ── */
+.fab{
+  background:radial-gradient(circle at 38% 28%,#4A5566 0%,#2A3340 42%,#151A22 100%);
+  border:1px solid var(--key-rim-dark);
+  box-shadow:0 3px 0 0 var(--key-rim-dark),0 8px 18px -4px rgba(21,40,74,.4),
+    inset 0 2px 2px 0 rgba(255,255,255,.22),inset 0 -3px 6px 0 rgba(0,0,0,.45);
+  transition:transform var(--up),box-shadow var(--up);
+}
+.fab:active{
+  transform:translateY(3px);
+  box-shadow:0 0 0 0 var(--key-rim-dark),0 2px 5px -1px rgba(21,40,74,.3),
+    inset 0 2px 6px 0 rgba(0,0,0,.55),inset 0 -1px 0 0 rgba(255,255,255,.1);
+  transition:transform var(--down),box-shadow var(--down);
+}
+.fab svg{transition:transform var(--up);}
+.fab:active svg{transform:scale(.88);}
+
+/* ── round transport keys: arrows, share, search ── */
+.glassbtn,.arrow{
+  background:var(--key-face);border:1px solid var(--key-rim);
+  backdrop-filter:none;-webkit-backdrop-filter:none;
+  box-shadow:var(--sh-up);
+  transition:transform var(--up),box-shadow var(--up),background .3s ease;
+}
+.glassbtn:hover,.arrow:hover{background:var(--key-face-hi);box-shadow:var(--sh-up);}
+.glassbtn:active,.arrow:active{
+  transform:translateY(var(--travel));box-shadow:var(--sh-down);
+  transition:transform var(--down),box-shadow var(--down);
+}
+
+/* ── big keys: generate, capture, primary ── */
+.gen-btn,.primary-btn{
+  background:var(--key-dark);border:1px solid var(--key-rim-dark);
+  box-shadow:0 4px 0 0 var(--key-rim-dark),0 10px 22px -6px rgba(21,40,74,.4),
+    inset 0 1px 0 0 rgba(255,255,255,.16),inset 0 -2px 6px 0 rgba(0,0,0,.4);
+  transition:transform var(--up),box-shadow var(--up);
+}
+.gen-btn:hover{transform:translateY(-1px);box-shadow:0 5px 0 0 var(--key-rim-dark),0 14px 28px -6px rgba(21,40,74,.44),
+    inset 0 1px 0 0 rgba(255,255,255,.16),inset 0 -2px 6px 0 rgba(0,0,0,.4);}
+.gen-btn:active,.primary-btn:active{
+  transform:translateY(4px);
+  box-shadow:0 0 0 0 var(--key-rim-dark),0 3px 8px -3px rgba(21,40,74,.3),inset 0 2px 7px 0 rgba(0,0,0,.5);
+  transition:transform var(--down),box-shadow var(--down);
+}
+.gen-btn svg{transition:transform var(--up);}
+.gen-btn:active svg{transform:translateX(2px);}
+
+/* ── action keys ── */
+.action{
+  background:var(--key-face);border:1px solid var(--key-rim);
+  box-shadow:var(--sh-up);
+  transition:transform var(--up),box-shadow var(--up),background .3s ease;
+}
+.action:hover{background:var(--key-face-hi);transform:translateY(-1px);
+  box-shadow:0 3px 0 0 var(--key-rim),0 7px 14px -3px var(--key-cast),inset 0 1px 0 0 var(--key-lip);}
+.action:active{transform:translateY(var(--travel));box-shadow:var(--sh-down);
+  transition:transform var(--down),box-shadow var(--down);}
+
+/* ── palette cards: latching keys in a rail ── */
+.pal-card{
+  background:var(--key-face);border:1px solid var(--key-rim);
+  box-shadow:var(--sh-up);
+  transition:transform var(--up),box-shadow var(--up),border-color .3s ease;
+}
+.pal-card:hover{transform:translateY(-2px);
+  box-shadow:0 3px 0 0 var(--key-rim),0 8px 16px -3px var(--key-cast),inset 0 1px 0 0 var(--key-lip);}
+.pal-card:active{transform:translateY(var(--travel));box-shadow:var(--sh-down);
+  transition:transform var(--down),box-shadow var(--down);}
+.pal-card.on{
+  border-color:var(--key-rim-dark);transform:translateY(2px);
+  box-shadow:0 0 0 0 var(--key-rim-dark),0 1px 3px rgba(23,24,29,.24),
+    inset 0 2px 5px -1px rgba(23,24,29,.18),inset 0 -1px 0 0 rgba(255,255,255,.7);
+  background:linear-gradient(180deg,#EDF2F9,#FAFCFE);
+}
+
+/* ── region rows: latching switches ── */
+.region-row{
+  background:var(--key-face);border:1px solid var(--key-rim);
+  box-shadow:var(--sh-up);
+  transition:transform var(--up),box-shadow var(--up),background .3s ease,border-color .3s ease;
+}
+.region-row:hover{background:var(--key-face-hi);transform:translateY(-1px);}
+.region-row:active{transform:translateY(2px);box-shadow:var(--sh-down);
+  transition:transform var(--down),box-shadow var(--down);}
+.region-row.sel{
+  border-color:var(--accent-line);transform:translateY(2px);
+  background:linear-gradient(180deg,#E4EFFE,#F3F8FF);
+  box-shadow:0 0 0 0 rgba(10,132,255,.4),0 1px 3px rgba(10,132,255,.2),
+    inset 0 2px 5px -1px rgba(10,132,255,.24),inset 0 -1px 0 0 rgba(255,255,255,.8);
+}
+.region-row.lock{
+  border-color:var(--key-rim-dark);transform:translateY(2px);
+  background:linear-gradient(180deg,#DCE4EE,#EAF0F7);
+  box-shadow:0 0 0 0 var(--key-rim-dark),0 1px 3px rgba(23,24,29,.2),
+    inset 0 2px 5px -1px rgba(23,24,29,.2),inset 0 -1px 0 0 rgba(255,255,255,.7);
+}
+
+/* ── hero rail thumbs: latching image keys ── */
+.rail-item{
+  box-shadow:var(--sh-up);
+  transition:transform var(--up),box-shadow var(--up),filter .3s ease,opacity .3s ease,border-color .3s ease;
+}
+.rail-item:active{transform:translateY(2px);box-shadow:var(--sh-down);
+  transition:transform var(--down),box-shadow var(--down);}
+.rail-item.on{
+  border-color:var(--key-rim-dark);transform:translateY(2px);
+  box-shadow:0 0 0 0 var(--key-rim-dark),0 1px 3px rgba(23,24,29,.26),
+    inset 0 2px 5px -1px rgba(23,24,29,.35);
+}
+
+/* ── small keys: save, capture tiles, dest pill ── */
+.save-btn,.cap-opt,.dest-pill{
+  background:var(--key-face);border:1px solid var(--key-rim);
+  box-shadow:var(--sh-up);
+  transition:transform var(--up),box-shadow var(--up),background .3s ease;
+}
+.save-btn:hover,.cap-opt:hover,.dest-pill:hover{background:var(--key-face-hi);}
+.save-btn:active,.cap-opt:active,.dest-pill:active{
+  transform:translateY(2px);box-shadow:var(--sh-down);
+  transition:transform var(--down),box-shadow var(--down);}
+.save-btn.saved{
+  background:linear-gradient(180deg,#E3F3EA,#D2EADC);border-color:#96C4AB;color:var(--ok);
+  transform:translateY(2px);
+  box-shadow:0 0 0 0 #96C4AB,0 1px 3px rgba(27,127,82,.18),inset 0 2px 4px -1px rgba(27,127,82,.2);
+}
+
+/* ── tab bar: keys in a rail, active one latched ── */
+.tabbar{background:rgba(250,252,255,.88);box-shadow:var(--s3),var(--sh-well);}
+.tab{border-radius:20px;transition:transform var(--up),background .3s ease,color .3s ease;}
+.tab:active{transform:translateY(2px);transition:transform var(--down);}
+.tab.on{
+  background:var(--key-face);
+  box-shadow:0 1px 0 0 var(--key-rim),0 3px 6px -1px var(--key-cast),inset 0 1px 0 0 var(--key-lip);
+}
+
+/* ── sidebar nav keys ── */
+@media(min-width:900px){
+  .snav{transition:transform var(--up),background .3s ease,box-shadow .3s ease;}
+  .snav:active{transform:translateY(2px);transition:transform var(--down);}
+  .snav.on{background:var(--key-face);border:1px solid var(--key-rim);
+    box-shadow:0 1px 0 0 var(--key-rim),0 3px 6px -1px var(--key-cast),inset 0 1px 0 0 var(--key-lip);}
+}
+
+/* respect reduced motion — keep the depth, drop the bounce */
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;}
+  .chip,.action,.pal-card,.region-row,.glassbtn,.arrow,.gen-btn,.fab,.save-btn,.cap-opt{
+    transition:box-shadow .12s linear,background .12s linear!important;}
+}
