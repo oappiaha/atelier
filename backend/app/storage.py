@@ -29,6 +29,17 @@ def ensure_bucket() -> None:
         s3.create_bucket(Bucket=s.s3_bucket)
 
 
+def object_exists(key: str) -> bool:
+    """True if the object is present in the bucket (used by POST /media/commit)."""
+    from botocore.exceptions import ClientError
+
+    try:
+        get_s3().head_object(Bucket=get_settings().s3_bucket, Key=key)
+        return True
+    except ClientError:
+        return False
+
+
 def presign_put(key: str, content_type: str, expires: int = 900) -> str:
     """Presigned PUT for direct client upload (POST /media/upload-url)."""
     return get_s3().generate_presigned_url(

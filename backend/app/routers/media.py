@@ -16,7 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import Ctx, get_ctx
 from app.db import get_session
 from app.routers.designs import PHASES
-from app.storage import presign_get, presign_put
+from app.storage import object_exists, presign_get, presign_put
+from app.workers.thumbs import enqueue_thumbs
 
 router = APIRouter(tags=["media"])
 
@@ -114,6 +115,14 @@ async def commit(
     ctx: Ctx = Depends(get_ctx),
     session: AsyncSession = Depends(get_session),
 ) -> MediaOut:
+    # the key is derived from (workspace, sha) at upload-url time; a commit whose
+    # key doesn't embed the claimed sha would corrupt the dedupe index
+    prefix = "audio" if body.kind == "audio" else "src"
+    if not body.r2_key.startswith(f"{prefix}/{ctx.workspace_id}/{body.sha256}."):
+        raise HTTPException(422, "r2_key does not match sha256/kind for this workspace")
+    # commit registers an object — the bytes must actually be in storage
+    if not object_exists(body.r2_key):
+        raise HTTPException(409, "object not found in storage; upload it before committing")
     row = (
         await session.execute(
             text(
@@ -137,6 +146,11 @@ async def commit(
         )
     ).one()
     await session.commit()
+    # thumbnails are generated out-of-band by the Celery resize worker (TDD §3);
+    # best-effort enqueue — never blocks or fails the commit. Covers the dedupe
+    # path too: an existing row that still lacks a thumb gets re-enqueued.
+    if row.kind == "image" and row.thumb_key is None:
+        enqueue_thumbs(str(row.id))
     return _media_out(row)
 
 

@@ -4,7 +4,7 @@
 > `atelier_light_v3 (3).html` (the visual spec). Update this file at the end of
 > every working session.
 
-**Last updated:** 2026-07-15 · session 1
+**Last updated:** 2026-07-16 · session 2
 
 ---
 
@@ -13,79 +13,86 @@
 | M | Scope | Status |
 |---|-------|--------|
 | M0 | Seedream vs Nano Banana bake-off | **Blocked on keys** — needs fal.ai + Gemini API keys and 3 real rei by Rei photos. ~1 day, <$10. Decides the primary adapter; nothing else blocked by it. |
-| M1 | Foundation | **DONE** — committed as `M1 foundation` (first commit on main). |
-| M2 | Archive core | **IN PROGRESS** — backend ~done, unverified. Frontend not started. |
+| M1 | Foundation | **DONE** (committed; "real URL" DoD still pending deploy accounts). |
+| M2 | Archive core | **DONE + verified** — backend proven end-to-end, 67-test pytest suite, Barrel Bag 001 seeded via the real API, frontend built and browser-verified, thumbnails live. |
 | M3 | Gallery + share link | Not started. |
-| M4 | PWA + inbox triage UI | Not started (inbox API exists; share-target manifest is in). |
+| M4 | PWA + inbox triage UI | Not started (inbox API exists + 3 real untriaged fixtures; share-target manifest is in). |
 | M5–M8 | Wada Studio | Not started. Schema already migrated. |
 
 ## What exists and is verified working
 
 - **Infra** — `docker compose up -d`: Postgres 16 on **:5433**, Redis 7 on
-  **:6380**, MinIO on **:9000** (console :9001, atelier/atelier-local). All
-  ports non-default to avoid clashes.
-- **Schema** — migration `0001` = the complete TDD §2 DDL (18 tables incl. all
-  Wada tables), the `media.phase` sync triggers, workspace seed
-  `00000000-…-0001 / rei`. Applied and inspected.
-- **Auth** — magic link → 30-day JWT (`sub`, `ws` claims). With no
-  `RESEND_API_KEY`, the link prints to the API log. Exercised end-to-end.
-- **Storage** — S3 adapter (R2-compatible); `atelier` bucket auto-creates on
-  API startup. Presigned PUT/GET helpers in `backend/app/storage.py`.
-- **Projects API** — GET/POST `/projects` verified; project "rei by Rei"
-  exists in the local DB.
-- **Frontend shell** — React 19 + Vite PWA at :5173, `/api` proxy to :8000.
-  `tokens.css` + `tactile.css` lifted verbatim from the mock. Login flow +
-  Home (projects list) real; Project/Design/Gallery/Studio are placeholders.
-  TypeScript clean, `pnpm build` green in CI config.
+  **:6380**, MinIO on **:9000** (console :9001, atelier/atelier-local).
+- **Schema** — migration `0001` = complete TDD §2 DDL (18 tables), phase sync
+  triggers, workspace seed `00000000-…-0001 / rei`.
+- **Auth** — magic link → 30-day JWT. Without `RESEND_API_KEY` the link prints
+  to the API log.
+- **Backend M2 (all routes exercised live with real auth):**
+  - designs: POST (auto `index_no`), list `?status=`, GET, PATCH (incl. cover).
+  - media: upload-url (presigned PUT + sha256 dedupe via `duplicate_of`),
+    commit (rejects key/sha mismatch 422, missing object 409), per-design
+    `?phase=` listing, inbox + triage.
+  - entries: timeline `?phase=`, POST with media attach, PATCH (phase change
+    re-syncs media via trigger).
+  - FK violations on all write paths → clean 404 (global handler in `main.py`),
+    not 500.
+  - **Thumbnails (TDD §3):** `thumbs.generate` Celery task renders
+    200/400/800 WEBP at `thumb/{ws}/{sha}/{w}.webp` on commit (best-effort
+    enqueue — commit never blocks/fails if broker or worker is down);
+    `thumb_key` → 400 variant; `thumb_url` served everywhere; backfill via
+    `python -m app.workers.backfill_thumbs` (idempotent, already run on dev).
+    Run the worker with `celery -A app.workers.celery_app worker`.
+- **pytest suite — the regression gate:** `cd backend && .venv/bin/python -m
+  pytest` → **67 passed** (~2.5s). Self-provisions an isolated `atelier_test`
+  DB + `atelier-test` bucket (real Postgres/MinIO/Redis, in-process app); has
+  a dev-data preservation guard. Run it before accepting any backend change.
+- **Frontend M2 (verified in real chromium, 32 scripted checks, 0 console
+  errors):** project design grid with status chips (real `?status=` queries),
+  design detail (hero crossfade + rail, Timeline/Media toggle, phase chips
+  filtering without remounts per TDD §10.2, entry card variants, masonry,
+  lightbox), capture sheet (5 modalities, dest pill design↔Inbox, real
+  presigned upload → commit → entry). `pnpm build` + oxlint green. Grid reads
+  `thumb_url ?? url` (srcset upgrade possible later — 200/800 already exist).
+- **Dev data:** project "rei by Rei" → design **Barrel Bag 001**
+  (`f28f5b7e-c23d-44f4-950c-d5832084e7bb`, in_production): 8 entries, 11 design
+  media across 5 phases + 3 untriaged inbox items, all thumbed. Reusable seed
+  flow lives in the session-2 scratch artifacts (`seed_barrel_bag.py`).
 
-## M2 state — exactly where we stopped
+## Product decisions to make (found during verification, deferred)
 
-Backend routers written, registered in `main.py`, ruff-clean, API boots:
-
-- `routers/designs.py` — POST `/designs` (auto `index_no`), GET
-  `/projects/{id}/designs` (?status=), GET/PATCH `/designs/{id}`.
-- `routers/media.py` — POST `/media/upload-url` (presigned PUT + sha256
-  dedupe), POST `/media/commit`, GET `/designs/{id}/media` (?phase=, the hot
-  query), GET `/inbox`, POST `/inbox/{id}/triage`.
-- `routers/entries.py` — GET `/designs/{id}/timeline` (?phase=), POST
-  `/entries` (+ attach media ids), PATCH `/entries/{id}`.
-
-**NOT yet done for M2:**
-
-1. ~~Route smoke test~~ (was mid-verification when session paused — run the
-   API and hit each endpoint once).
-2. **pytest suite** for the API surface (task #7).
-3. **Seed Barrel Bag 001** through the real API: create design, upload real
-   bytes via presigned PUT, entries across phases, verify timeline/media
-   filters + inbox triage (PRD §7 DoD).
-4. **Frontend M2** (task #6): project design grid with status filter chips,
-   design detail (hero, Timeline/Media seg toggle, phase chips, timeline
-   cards, masonry + lightbox), capture sheet (5 modalities, dest pill →
-   design or Inbox). Rendering discipline per TDD §10.2: build once, mutate
-   in place, stable keys, entrance animations on mount only.
-5. Thumbnails: `thumb_key` is in the schema but nothing generates thumbs yet —
-   needs a resize step (worker or on-upload) before the grid gets heavy.
+- Dedupe semantics: capturing byte-identical media to a design **moves** the
+  existing media row onto the new entry. Decide before M4's share-target lands
+  Instagram duplicates (surface "already in archive"?).
+- Dedupe commit returns 201 (not 200) for an existing row — pinned by tests.
+- Inspo modality requires an image; a bare link has no backend representation.
+- Voice capture implemented (MediaRecorder → webm) but not mic-tested; audio
+  media get no thumbs (skipped cleanly). HEIC needs `pillow-heif` before real
+  iPhone captures (M4).
+- Mobile layout uses the mock's responsive CSS but wasn't browser-driven.
 
 ## How to resume
 
 ```bash
 docker compose up -d                          # infra
 cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
+cd backend && .venv/bin/celery -A app.workers.celery_app worker  # thumbs
 cd frontend && pnpm dev                       # :5173, magic link prints to API log
+cd backend && .venv/bin/python -m pytest      # 67 tests, isolated infra
 ```
 
-## Decisions made this session (beyond the TDD)
+## Decisions made (beyond the TDD)
 
-- Vite 8 (current) instead of the TDD's pinned Vite 6 — no API differences
-  that affect us; vite-plugin-pwa is compatible.
-- Python 3.13 (Homebrew) instead of 3.12 — no pinned dep conflicts.
-- Local dev uses MinIO + console-printed magic links so zero external
-  accounts are needed until deploy (Fly.io, Resend, R2, Sentry all pending).
-- `pydantic[email]` added for EmailStr validation.
+- Session 1: Vite 8, Python 3.13, MinIO + console magic links locally,
+  `pydantic[email]`.
+- Session 2: `thumb_key` points at the 400px WEBP (schema has one column; the
+  TDD's 200/800 variants exist at canonical keys for future srcset). Pillow
+  12.3 added. FK errors mapped centrally (constraint-name suffix → entity) in
+  `main.py` rather than per-router.
 
 ## Needs from Beezy
 
 - fal.ai + Gemini API keys, 3 real product photos → unblocks M0.
 - Resend API key + domain → real magic-link emails (deploy time).
-- Fly.io + Cloudflare R2 accounts → deploy (M1's "real URL" DoD is unmet
-  until then; local-only today).
+- Fly.io + Cloudflare R2 accounts → deploy (M1's "real URL" DoD; note the Fly
+  setup needs a Celery worker process alongside the API for thumbs/Wada).
+- Product calls on the dedupe/share-target semantics above before M4.

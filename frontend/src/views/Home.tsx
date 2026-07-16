@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { api, type Project } from '../lib/api'
 
 export default function Home() {
+  const navigate = useNavigate()
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => api<Project[]>('/projects'),
@@ -31,7 +33,7 @@ export default function Home() {
         ) : (
           <div className="proj-row">
             {projects.map(p => (
-              <div key={p.id} className="panel press" style={{ padding: 20 }}>
+              <div key={p.id} className="panel press" style={{ padding: 20 }} onClick={() => navigate(`/p/${p.id}`)}>
                 <div className="eyebrow">{p.kicker ?? 'PROJECT'}</div>
                 <div className="syne" style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{p.name}</div>
                 <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)', marginTop: 8 }}>

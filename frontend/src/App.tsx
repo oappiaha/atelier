@@ -1,6 +1,9 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { getToken } from './lib/api'
+import { useCapture } from './lib/store'
+import CaptureSheet from './components/CaptureSheet'
+import Toast from './components/Toast'
 
 function TabIcon({ d }: { d: string }) {
   return (
@@ -16,10 +19,15 @@ const GALLERY_ICON = 'M3 5.5h14v11H3zM3 12l4-3 4 3.5L15 9l2 1.5'
 export default function App() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const openCapture = useCapture(s => s.openCapture)
+  const authed = !!getToken()
 
   useEffect(() => {
-    if (!getToken()) navigate('/login', { replace: true })
-  }, [navigate])
+    if (!authed) navigate('/login', { replace: true })
+  }, [authed, navigate])
+
+  // don't mount views (and fire their queries) until the token exists
+  if (!authed) return null
 
   const section = pathname.startsWith('/gallery')
     ? 'gallery'
@@ -45,7 +53,7 @@ export default function App() {
           </NavLink>
         </nav>
         <div style={{ marginTop: 'auto' }}>
-          <button className="gen-btn press" style={{ padding: '12px 15px' }}>
+          <button className="gen-btn press" style={{ padding: '12px 15px' }} onClick={openCapture}>
             <span style={{ fontSize: 13, fontWeight: 500 }}>Capture</span>
             <span style={{ fontSize: 15 }}>+</span>
           </button>
@@ -61,7 +69,7 @@ export default function App() {
           <TabIcon d={HOME_ICON} />
           <span className="tab-label">Archive</span>
         </button>
-        <button className="fab" aria-label="Capture">
+        <button className="fab" aria-label="Capture" onClick={openCapture}>
           <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
             <path d="M9 3v12M3 9h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
@@ -71,6 +79,9 @@ export default function App() {
           <span className="tab-label">Gallery</span>
         </button>
       </nav>
+
+      <CaptureSheet />
+      <Toast />
     </div>
   )
 }

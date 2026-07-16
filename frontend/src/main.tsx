@@ -4,6 +4,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 import './styles/tokens.css'
+import './styles/views.css'
 import './styles/tactile.css'
 
 import App from './App'
