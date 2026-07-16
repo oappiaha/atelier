@@ -80,8 +80,15 @@
   with Beezy whether it should run on all uploads. Needs a PhotoRoom API key
   (sandbox tier exists for dev). Feeds M3 gallery heroes and M5+ Wada inputs.
 - **Storage vendor is open, Cloudflare not required:** the S3 adapter is
-  generic; R2 (TDD default, zero egress) vs Tigris (Fly-native, zero egress,
-  single-vendor deploy) — decide at deploy time, env-var change only.
+  generic; R2 (TDD default, zero egress, 10GB free tier) vs Tigris (Fly-native)
+  vs MinIO-on-VPS — decide at deploy time, env-var change only.
+- **Hosting assessment (2026-07-16):** Fly.io (TDD default) ≈ $8–25/mo for
+  API + worker + PG + Redis; a single Hetzner CX23 (~€4/mo, 2vCPU/4GB, 20TB
+  traffic) runs the existing compose stack as-is for ~3–5x less. R2 free tier
+  makes storage ~$0 either way. Recommendation: Hetzner VPS + R2 unless Beezy
+  prefers Fly's managed deploys. Decide at deploy (M1 "real URL" DoD).
+- **PhotoRoom pipeline ON HOLD** per Beezy; API key received and stored in
+  `backend/.env` (gitignored — key lives only there, never in git).
 
 ## How to resume
 
