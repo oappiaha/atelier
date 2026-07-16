@@ -116,6 +116,80 @@ export interface Entry {
   media: Media[]
 }
 
+// ── share links (M3, TDD §4) ────────────────────────────────────────────────
+
+export const SCOPES = ['finals', 'full'] as const
+export type ShareScope = (typeof SCOPES)[number]
+export const SCOPE_LABELS: Record<ShareScope, string> = {
+  finals: 'Finals',
+  full: 'Full timeline',
+}
+
+export interface ShareLink {
+  id: string
+  project_id: string | null
+  design_id: string | null
+  slug: string
+  scope: ShareScope
+  url: string // API-relative: /s/{slug}
+  revoked_at: string | null
+  view_count: number
+  created_at: string
+}
+
+/** Mint (or fetch the existing live) view-only link. Idempotent per target+scope. */
+export const mintShare = (target: { project_id?: string; design_id?: string }, scope: ShareScope) =>
+  api<ShareLink>('/share', { method: 'POST', body: JSON.stringify({ ...target, scope }) })
+
+/* The public projection contains NO internal ids; media are addressed by
+   opaque API-relative paths (/s/{slug}/m/{i}) that 307-redirect to storage.
+   Everything public rides the same /api origin prefix the rest of the app
+   uses (vite dev proxy now; one reverse proxy in prod). */
+export const publicPath = (apiRelative: string) => `/api${apiRelative}`
+
+export interface PublicMedia {
+  index: number
+  kind: 'image' | 'audio'
+  phase: Phase | null
+  url: string
+  thumb_url: string | null
+  width: number | null
+  height: number | null
+  duration_ms: number | null
+  caption: string | null
+  created_at: string
+}
+
+export interface PublicNote {
+  phase: Phase
+  body: string
+  occurred_at: string
+}
+
+export interface PublicDesign {
+  name: string
+  index_no: number
+  status: DesignStatus
+  media: PublicMedia[]
+  notes: PublicNote[]
+}
+
+export interface PublicProjection {
+  slug: string
+  scope: ShareScope
+  target: 'project' | 'design'
+  project: { name: string; kicker: string | null } | null
+  designs: PublicDesign[]
+}
+
+/** Unauthenticated fetch for the public gallery — NEVER attaches the JWT and
+ *  never redirects to /login (recipients have no account). */
+export async function fetchPublicProjection(slug: string): Promise<PublicProjection> {
+  const res = await fetch(publicPath(`/s/${slug}`))
+  if (!res.ok) throw new ApiError(res.status, await res.text())
+  return res.json() as Promise<PublicProjection>
+}
+
 interface UploadUrlOut {
   upload_url: string | null
   r2_key: string

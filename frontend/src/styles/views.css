@@ -225,3 +225,58 @@ textarea.field{min-height:84px;resize:none;}
 .back-inline{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--fog);
   margin-top:max(env(safe-area-inset-top),16px);transition:transform .3s var(--ease);}
 .back-inline:hover{transform:translateX(-3px);}
+
+/* ── GALLERY (mock: .gal-toggle, .fan-, .ring- blocks) ── */
+.gal-toggle{display:flex;gap:5px;padding:4px;border-radius:999px;background:var(--bg-deep);border:1px solid var(--stroke);}
+.gal-mode{padding:8px 15px;border-radius:999px;font-family:'DM Mono';font-size:10px;letter-spacing:.08em;
+  color:var(--fog);transition:all .32s var(--ease);}
+.gal-mode.on{background:var(--ink);color:#FFF;box-shadow:var(--s1);}
+.fan-stage{position:relative;height:min(400px,58dvh);margin-top:10px;display:flex;align-items:center;justify-content:center;
+  perspective:1300px;touch-action:pan-y;overflow:hidden;width:100%;min-width:0;}
+@media(min-width:900px){.fan-stage{height:500px;}}
+.fan-card{position:absolute;width:min(250px,66vw);height:min(340px,48dvh);border-radius:24px;overflow:hidden;
+  box-shadow:var(--s3);border:1px solid var(--stroke);cursor:pointer;
+  transition:transform .6s var(--ease),opacity .5s ease,filter .5s ease;}
+@media(min-width:900px){.fan-card{width:300px;height:410px;}}
+.fan-art{position:absolute;inset:0;transition:transform .8s var(--ease);background-size:cover;background-position:center;}
+.fan-card.center:hover .fan-art{transform:scale(1.05);}
+.fan-label{position:absolute;left:13px;bottom:13px;color:#FFF;z-index:2;}
+.fan-nav{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:4px;}
+.fan-count{font-family:'DM Mono';font-size:10.5px;letter-spacing:.1em;color:var(--fog);background:var(--card);
+  border:1px solid var(--stroke);border-radius:999px;padding:9px 15px;box-shadow:var(--s1);
+  max-width:56vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.arrow{width:40px;height:40px;border-radius:50%;flex-shrink:0;}
+.ring-stage{position:relative;height:min(520px,74dvh);display:flex;align-items:center;justify-content:center;
+  overflow:hidden;width:100%;min-width:0;}
+.ring{position:relative;animation:spin 64s linear infinite;}
+.ring-stage:hover .ring{animation-play-state:paused;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.ring-item{position:absolute;width:52px;height:68px;border-radius:9px;overflow:hidden;box-shadow:var(--s2);
+  border:1px solid var(--stroke);left:50%;top:50%;margin:-34px 0 0 -26px;
+  transition:transform .4s var(--spring),box-shadow .3s ease;cursor:pointer;}
+.ring-item:hover{box-shadow:var(--s3);z-index:9;}
+.ring-item > div{width:100%;height:100%;animation:spinBack 64s linear infinite;background-size:cover;background-position:center;}
+@keyframes spinBack{to{transform:rotate(-360deg);}}
+.ring-center{position:absolute;text-align:center;pointer-events:none;}
+.ring-center > *{pointer-events:auto;}
+
+/* ── SHARE (mock: .share-link) ── */
+.share-link{display:flex;align-items:center;justify-content:space-between;gap:9px;border-radius:14px;padding:12px 14px;
+  background:var(--bg);border:1px solid var(--stroke);margin-top:12px;min-width:0;}
+
+/* ── PUBLIC /s/:slug — no app shell; must be phone-correct ── */
+.pub{min-height:100dvh;background:var(--bg);overflow-x:hidden;width:100%;max-width:100%;}
+.pub-content{max-width:960px;margin:0 auto;padding:0 16px max(env(safe-area-inset-bottom),40px);min-width:0;}
+@media(min-width:900px){.pub-content{padding:0 40px 60px;}}
+.pub-hdr{padding:max(env(safe-area-inset-top),26px) 0 18px;}
+@media(min-width:900px){.pub-hdr{padding-top:52px;}}
+.pub-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;min-width:0;}
+@media(min-width:900px){.pub-grid{grid-template-columns:repeat(3,1fr);gap:14px;}}
+.pub-tile{border-radius:18px;overflow:hidden;position:relative;border:1px solid var(--stroke);background:var(--card);
+  box-shadow:var(--s1);min-width:0;animation:tileIn .55s var(--ease) both;}
+.pub-tile img{display:block;width:100%;height:auto;min-height:120px;object-fit:cover;}
+.pub-design{margin-top:26px;min-width:0;}
+/* full-timeline photos: keep low-res originals from blowing up into walls */
+.pub .tl-card img{max-height:420px;object-fit:cover;}
+.pub-foot{text-align:center;padding:36px 0 8px;}
+.pub-center{min-height:100dvh;display:grid;place-items:center;padding:16px;}

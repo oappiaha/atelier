@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app import auth
 from app.config import get_settings
 from app.db import engine
-from app.routers import designs, entries, media, projects
+from app.routers import designs, entries, media, projects, share
 
 
 @asynccontextmanager
@@ -72,6 +72,8 @@ app.include_router(projects.router)
 app.include_router(designs.router)
 app.include_router(entries.router)
 app.include_router(media.router)
+app.include_router(share.router)
+app.include_router(share.public_router)  # TDD §4: separate router, NO auth dependency
 
 
 @app.get("/health")

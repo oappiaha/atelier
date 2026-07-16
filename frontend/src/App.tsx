@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { getToken } from './lib/api'
 import { useCapture } from './lib/store'
 import CaptureSheet from './components/CaptureSheet'
+import ShareSheet from './components/ShareSheet'
 import Toast from './components/Toast'
 
 function TabIcon({ d }: { d: string }) {
@@ -81,6 +82,7 @@ export default function App() {
       </nav>
 
       <CaptureSheet />
+      <ShareSheet />
       <Toast />
     </div>
   )

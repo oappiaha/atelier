@@ -4,7 +4,7 @@
 > `atelier_light_v3 (3).html` (the visual spec). Update this file at the end of
 > every working session.
 
-**Last updated:** 2026-07-16 · session 2
+**Last updated:** 2026-07-16 · session 2 (M2 + M3 + long-term needs)
 
 ---
 
@@ -15,7 +15,7 @@
 | M0 | Seedream vs Nano Banana bake-off | **Blocked on keys** — needs fal.ai + Gemini API keys and 3 real rei by Rei photos. ~1 day, <$10. Decides the primary adapter; nothing else blocked by it. |
 | M1 | Foundation | **DONE** (committed; "real URL" DoD still pending deploy accounts). |
 | M2 | Archive core | **DONE + verified** — backend proven end-to-end, 67-test pytest suite, Barrel Bag 001 seeded via the real API, frontend built and browser-verified, thumbnails live. |
-| M3 | Gallery + share link | Not started. |
+| M3 | Gallery + share link | **DONE + verified** — 84-test suite, public page proven in a logged-out browser at 390px. DoD ("link opens for someone with no account") met locally; needs the M1 deploy for a real public URL. |
 | M4 | PWA + inbox triage UI | Not started (inbox API exists + 3 real untriaged fixtures; share-target manifest is in). |
 | M5–M8 | Wada Studio | Not started. Schema already migrated. |
 
@@ -53,10 +53,34 @@
   lightbox), capture sheet (5 modalities, dest pill design↔Inbox, real
   presigned upload → commit → entry). `pnpm build` + oxlint green. Grid reads
   `thumb_url ?? url` (srcset upgrade possible later — 200/800 already exist).
+- **Share links (M3, TDD §4/§9):** POST `/share` (auth, idempotent — one live
+  URL per target+scope per PRD A8, 200 reuse vs 201 new); public `GET /s/{slug}`
+  on a separate no-auth router, Redis rate limit 60/min/IP (counts media
+  redirects — revisit before M4), view_count, revoked→404 (revoke = SQL
+  `UPDATE share_links SET revoked_at=now()`). The projection contains ZERO
+  internal uuids: media are addressed by opaque `/s/{slug}/m/{i}[/thumb]`
+  paths that 307-redirect to presigned storage GETs. `finals` scope = phases
+  (final, editorial) per PRD A7; `full` adds text-note entries.
+- **Gallery + public page (M3 frontend, verified in chromium 31/31 × my rerun):**
+  `/gallery` Stack (fanned carousel) + Ring modes over cross-project
+  final+editorial media, phase chips; ShareSheet (scope toggle, copy+toast)
+  from design header, project header, ring centre; `/s/:slug` public page with
+  no app shell (finals grid or full timeline, not-found/429 states), zero
+  authed requests when logged out, no horizontal overflow at 390px.
+  **Prod routing is load-bearing:** same-origin `/api/* → backend` (prefix
+  stripped) — the public page fetches `/api/s/{slug}`; `publicPath()` in
+  api.ts is the seam if the API base ever changes.
 - **Dev data:** project "rei by Rei" → design **Barrel Bag 001**
-  (`f28f5b7e-c23d-44f4-950c-d5832084e7bb`, in_production): 8 entries, 11 design
-  media across 5 phases + 3 untriaged inbox items, all thumbed. Reusable seed
-  flow lives in the session-2 scratch artifacts (`seed_barrel_bag.py`).
+  (`f28f5b7e-c23d-44f4-950c-d5832084e7bb`, in_production): 10 entries, 14 design
+  media across 5 phases (incl. 2 editorial + 1 extra final seeded for the
+  gallery) + 3 untriaged inbox items, all thumbed. Live share links:
+  `/s/reibyrei-4139` (project finals), `/s/reibyrei-mupd` (project full),
+  `/s/barrelbag001-tax7` + `-c8d9` (design finals/full); `barrelbag001-j9wj`
+  revoked (404 fixture). Reusable seed flow in session-2 scratch artifacts.
+- **`LONGTERM-NEEDS.md`** (repo root): full external-dependency / cost /
+  setup-order assessment, all prices cited as of 2026-07-16. Headline: 6
+  accounts total, ~$9.3/mo fixed (Hetzner+R2), Wada <$2 target holds,
+  Seedream price-favored at 1536px.
 
 ## Product decisions to make (found during verification, deferred)
 
@@ -111,8 +135,11 @@ cd backend && .venv/bin/python -m pytest      # 67 tests, isolated infra
 
 ## Needs from Beezy
 
-- fal.ai + Gemini API keys, 3 real product photos → unblocks M0.
-- Resend API key + domain → real magic-link emails (deploy time).
+- ~~fal.ai + Gemini API keys~~ RECEIVED 2026-07-16 (in `backend/.env`, gitignored;
+  rotate all before prod — they transited chat). Resend key also received,
+  stored commented-out (activating it switches local auth to real email sends).
+- **3 real product photos** → the only remaining M0 blocker.
+- Domain + Resend domain verification (SPF/DKIM) → deploy time.
 - Fly.io account → deploy (M1's "real URL" DoD; the Fly setup needs a Celery
   worker process alongside the API for thumbs/Wada). Storage: R2 or Tigris —
   Cloudflare optional, see "Added scope".

@@ -6,7 +6,7 @@ import {
   type Design as DesignT, type Entry, type Media, type Phase, type Project as ProjectT,
 } from '../lib/api'
 import Lightbox from '../components/Lightbox'
-import { toast, useCapture } from '../lib/store'
+import { toast, useCapture, useShare } from '../lib/store'
 
 type PhaseFilter = 'all' | Phase
 type LbState = { items: Media[]; index: number; phaseLabel: string } | null
@@ -176,6 +176,7 @@ export default function Design() {
   const { designId } = useParams<{ designId: string }>()
   const navigate = useNavigate()
   const setDesignCtx = useCapture(s => s.setDesignCtx)
+  const openShare = useShare(s => s.openShare)
 
   const design = useQuery({
     queryKey: ['design', designId],
@@ -258,7 +259,9 @@ export default function Design() {
             className="glassbtn press rise"
             aria-label="Share"
             style={{ width: 40, height: 40, animationDelay: '.06s' }}
-            onClick={() => toast('Share — coming in M3')}
+            onClick={() =>
+              d ? openShare({ kind: 'design', id: d.id, name: d.name }) : toast('Still loading…')
+            }
           >
             <svg width="14" height="15" viewBox="0 0 15 16" fill="none">
               <path d="M7.5 1v9M7.5 1L4 4.5M7.5 1L11 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

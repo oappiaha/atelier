@@ -45,6 +45,28 @@ interface CaptureState {
   setDesignCtx: (ctx: DesignCtx | null) => void
 }
 
+// ── share sheet (M3) ─────────────────────────────────────────────────────────
+
+export interface ShareTarget {
+  kind: 'project' | 'design'
+  id: string
+  name: string
+}
+
+interface ShareState {
+  open: boolean
+  target: ShareTarget | null
+  openShare: (target: ShareTarget) => void
+  closeShare: () => void
+}
+
+export const useShare = create<ShareState>(set => ({
+  open: false,
+  target: null,
+  openShare: target => set({ open: true, target }),
+  closeShare: () => set({ open: false }),
+}))
+
 export const useCapture = create<CaptureState>((set, get) => ({
   open: false,
   designCtx: null,

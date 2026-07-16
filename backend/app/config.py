@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # V1 single-tenant seed (TDD §2.1)
     workspace_id: str = "00000000-0000-0000-0000-000000000001"
 
+    # public share-link router (TDD §4: "Rate limited to 60 req/min per IP")
+    share_rate_limit_per_min: int = 60
+
     sentry_dsn: str | None = None
 
 

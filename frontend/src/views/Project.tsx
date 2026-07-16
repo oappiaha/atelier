@@ -5,12 +5,14 @@ import {
   api, STATUSES, STATUS_CLASS, STATUS_LABELS,
   type Design, type DesignStatus, type Project as ProjectT,
 } from '../lib/api'
+import { useShare } from '../lib/store'
 
 const FALLBACK_ART = 'linear-gradient(150deg,#DCE4EE,#B9C6D8 55%,#8FA2BC)'
 
 export default function Project() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+  const openShare = useShare(s => s.openShare)
   const [status, setStatus] = useState<'all' | DesignStatus>('all')
 
   const { data: projects } = useQuery({
@@ -53,6 +55,20 @@ export default function Project() {
               {project?.name ?? '…'}
             </div>
           </div>
+          {project && (
+            <button
+              className="glassbtn press rise"
+              aria-label="Share"
+              id="project-share"
+              style={{ width: 40, height: 40, animationDelay: '.06s' }}
+              onClick={() => openShare({ kind: 'project', id: project.id, name: project.name })}
+            >
+              <svg width="14" height="15" viewBox="0 0 15 16" fill="none">
+                <path d="M7.5 1v9M7.5 1L4 4.5M7.5 1L11 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M2 8v5.5h11V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+          )}
         </div>
 
         <div className="chips" style={{ marginBottom: 14 }}>
