@@ -70,6 +70,19 @@
   iPhone captures (M4).
 - Mobile layout uses the mock's responsive CSS but wasn't browser-driven.
 
+## Added scope (session 2, Beezy)
+
+- **PhotoRoom background removal** for uploaded images: Celery task calling the
+  PhotoRoom API (same pattern as `thumbs.generate` — async, best-effort,
+  idempotent backfill), result stored as a derivative (needs a `cutout_key`
+  migration, mirroring `thumb_key`). Default plan: auto-run for photos in
+  `final`/`editorial` phases + on-demand elsewhere (credit control) — confirm
+  with Beezy whether it should run on all uploads. Needs a PhotoRoom API key
+  (sandbox tier exists for dev). Feeds M3 gallery heroes and M5+ Wada inputs.
+- **Storage vendor is open, Cloudflare not required:** the S3 adapter is
+  generic; R2 (TDD default, zero egress) vs Tigris (Fly-native, zero egress,
+  single-vendor deploy) — decide at deploy time, env-var change only.
+
 ## How to resume
 
 ```bash
@@ -93,6 +106,9 @@ cd backend && .venv/bin/python -m pytest      # 67 tests, isolated infra
 
 - fal.ai + Gemini API keys, 3 real product photos → unblocks M0.
 - Resend API key + domain → real magic-link emails (deploy time).
-- Fly.io + Cloudflare R2 accounts → deploy (M1's "real URL" DoD; note the Fly
-  setup needs a Celery worker process alongside the API for thumbs/Wada).
-- Product calls on the dedupe/share-target semantics above before M4.
+- Fly.io account → deploy (M1's "real URL" DoD; the Fly setup needs a Celery
+  worker process alongside the API for thumbs/Wada). Storage: R2 or Tigris —
+  Cloudflare optional, see "Added scope".
+- PhotoRoom API key (sandbox tier fine for dev) → background-removal pipeline.
+- Product calls on the dedupe/share-target semantics above before M4, and on
+  whether PhotoRoom runs on all uploads or only final/editorial + on-demand.
