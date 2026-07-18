@@ -101,13 +101,22 @@
 - Prompt gotcha: "keep metal hardware silver" turns the embroidered crest into metal
   on both models — reword per-region in M7 templates.
 
-## Product decisions to make (found during verification, deferred)
+## Product decisions — DECIDED by Beezy 2026-07-18
 
-- Dedupe semantics: capturing byte-identical media to a design **moves** the
-  existing media row onto the new entry. Decide before M4's share-target lands
-  Instagram duplicates (surface "already in archive"?).
+- **Duplicate captures:** keep the move-to-new-entry dedupe behavior, but the UI
+  must surface an "already in archive" notice when `duplicate_of` comes back.
+  (Small frontend task; wire into CaptureSheet + share-target flow in M4.)
+- **PhotoRoom policy:** auto-run background removal ONLY for final/editorial
+  phase photos; manual "remove background" action elsewhere. (When un-held.)
+- **Wada 2K export (M8):** free local upscale of the stored 1536px colorway by
+  default; paid 2048px re-generation (~$0.135) offered as an explicit option.
+
+## Product notes still open
+
 - Dedupe commit returns 201 (not 200) for an existing row — pinned by tests.
 - Inspo modality requires an image; a bare link has no backend representation.
+- Real names for the 2 photographed products (green backpack, blue barrel bag)
+  → needed to seed them as archive designs (V1 DoD: 3 real designs).
 - Voice capture implemented (MediaRecorder → webm) but not mic-tested; audio
   media get no thumbs (skipped cleanly). HEIC needs `pillow-heif` before real
   iPhone captures (M4).
