@@ -12,7 +12,7 @@
 
 | M | Scope | Status |
 |---|-------|--------|
-| M0 | Seedream vs Nano Banana bake-off | **Blocked on keys** — needs fal.ai + Gemini API keys and 3 real rei by Rei photos. ~1 day, <$10. Decides the primary adapter; nothing else blocked by it. |
+| M0 | Seedream vs Nano Banana bake-off | **DONE 2026-07-18** — ran on 2 real photos (3rd pending, non-blocking), $1.37 spent of $10 cap. **Primary adapter: Seedream 5.0 Pro** (`bytedance/seedream/v5/pro/edit` — no `fal-ai/` prefix); NB2 is a real fallback (3x faster @12.5s → eager/preview drafts + vendor insurance). Full report + 14 outputs in session scratch `atelier-m0/t1/bakeoff-report.md`. |
 | M1 | Foundation | **DONE** (committed; "real URL" DoD still pending deploy accounts). |
 | M2 | Archive core | **DONE + verified** — backend proven end-to-end, 67-test pytest suite, Barrel Bag 001 seeded via the real API, frontend built and browser-verified, thumbnails live. |
 | M3 | Gallery + share link | **DONE + verified** — 84-test suite, public page proven in a logged-out browser at 390px. DoD ("link opens for someone with no account") met locally; needs the M1 deploy for a real public URL. |
@@ -81,6 +81,25 @@
   setup-order assessment, all prices cited as of 2026-07-16. Headline: 6
   accounts total, ~$9.3/mo fixed (Hetzner+R2), Wada <$2 target holds,
   Seedream price-favored at 1536px.
+
+## M0 findings that amend TDD §8 (load-bearing for M5–M8)
+
+- `gemini-2.5-flash` is 404 ("not available to new users") on our key — segmentation
+  runs on **gemini-3.5-flash**. Latency 10–13s per photo (<15s DoD ✓), labels/confidence
+  excellent (0.99).
+- TDD §8.1's `mask_png_b64` contract is **dead on Gemini 3.x** (requesting PNG masks
+  loops to MAX_TOKENS). The real contract is **polygon masks, [y,x]-ordered, 0–1000
+  normalized** — but they're coarse (~20 vertices), so **M5 needs a mask-refinement
+  stage** (dense polygons / matting / grow-cut) before §8.10's lock guarantee is real.
+  This is now the M5 critical path.
+- **Neither API has a true mask parameter.** Seedream's `supports_mask` = mask passed
+  as reference image + instruction, obeyed ~50% in our sample → treat as advisory.
+  §8.10 post-hoc compositing is the correctness guarantee for BOTH adapters.
+- Seedream: superb in-mask quality (ΔE 4–9, leather texture flawless) but poor edit
+  locality; 39s/edit — trie chains of 2–3 steps won't fit "first colorway <45s", NB2
+  eager drafts cover that. Cost figures confirmed ($0.0675@1536 / NB2 $0.101@2K).
+- Prompt gotcha: "keep metal hardware silver" turns the embroidered crest into metal
+  on both models — reword per-region in M7 templates.
 
 ## Product decisions to make (found during verification, deferred)
 
