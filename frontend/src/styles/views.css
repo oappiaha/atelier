@@ -3,6 +3,48 @@
 
 @keyframes sheen{0%,62%{background-position:140% 0;}92%,100%{background-position:-70% 0;}}
 
+/* ── HOME (inbox row — mock .inbox, PRD A5) ── */
+.inbox{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--stroke);
+  border-radius:20px;padding:13px 15px;box-shadow:var(--s1);margin-bottom:14px;position:relative;overflow:hidden;
+  width:100%;text-align:left;cursor:pointer;
+  transition:transform .35s var(--spring),box-shadow .35s ease;}
+.inbox:hover{transform:translateY(-2px);box-shadow:var(--s2);}
+.inbox-icon{width:38px;height:38px;border-radius:12px;flex-shrink:0;background:var(--bg-deep);
+  display:flex;align-items:center;justify-content:center;font-size:16px;}
+.inbox-icon span{display:block;animation:bob 2.6s ease-in-out infinite;}
+@keyframes bob{0%,100%{transform:translateY(0) rotate(0);}50%{transform:translateY(-2px) rotate(6deg);}}
+.pulse-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;position:relative;}
+.pulse-dot::after{content:'';position:absolute;inset:0;border-radius:50%;background:var(--accent);
+  animation:ping 2s var(--ease) infinite;}
+@keyframes ping{0%{transform:scale(1);opacity:.6;}70%,100%{transform:scale(3.2);opacity:0;}}
+.inbox-thumbs{display:flex;flex-shrink:0;}
+.inbox-thumbs img{width:30px;height:30px;border-radius:10px;object-fit:cover;background:var(--bg-deep);
+  border:2px solid var(--card);margin-left:-9px;box-shadow:var(--s1);}
+.inbox-thumbs img:first-child{margin-left:0;}
+
+/* ── INBOX TRIAGE (M4) ── */
+.ib-list{display:grid;gap:12px;}
+@media(min-width:900px){.ib-list{grid-template-columns:1fr 1fr;}}
+.ib-card{display:flex;gap:13px;align-items:center;padding:11px;width:100%;text-align:left;cursor:pointer;
+  transition:transform .35s var(--spring),box-shadow .35s ease;}
+.ib-card:hover{transform:translateY(-2px);box-shadow:var(--s2);}
+.ib-card img{width:62px;height:62px;border-radius:14px;object-fit:cover;flex-shrink:0;background:var(--bg-deep);}
+.ib-card .ib-txt{flex:1;min-width:0;}
+.ib-src{font-family:'DM Mono';font-size:9px;color:var(--faint);margin-top:4px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tri-hero{width:100%;height:150px;border-radius:18px;object-fit:cover;background:var(--bg-deep);}
+.tri-designs{display:flex;flex-direction:column;gap:6px;max-height:168px;overflow-y:auto;margin-top:6px;}
+.tri-design{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;
+  border:1px solid var(--stroke-strong);background:var(--bg);cursor:pointer;text-align:left;width:100%;
+  transition:border-color .25s ease,background .25s ease;}
+.tri-design.on{border-color:var(--ink);background:var(--bg-deep);}
+.tri-design .t{flex:1;min-width:0;font-size:12.5px;font-weight:500;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.tri-check{width:16px;height:16px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;font-size:9px;color:#FFF;background:var(--ink);opacity:0;transform:scale(.6);
+  transition:all .25s var(--spring);}
+.tri-design.on .tri-check{opacity:1;transform:none;}
+
 /* ── HOME (project cards) ── */
 .proj-row{display:grid;gap:14px;}
 @media(min-width:900px){.proj-row{grid-template-columns:1fr 1fr;}}

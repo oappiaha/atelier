@@ -9,6 +9,7 @@ import './styles/tactile.css'
 
 import App from './App'
 import Home from './views/Home'
+import Inbox from './views/Inbox'
 import Project from './views/Project'
 import Design from './views/Design'
 import Gallery from './views/Gallery'
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <Home /> },
+      { path: 'inbox', element: <Inbox /> },
       { path: 'p/:projectId', element: <Project /> },
       { path: 'd/:designId', element: <Design /> },
       { path: 'd/:designId/study/:studyId', element: <Studio /> },

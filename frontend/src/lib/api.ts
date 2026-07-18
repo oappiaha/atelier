@@ -116,6 +116,19 @@ export interface Entry {
   media: Media[]
 }
 
+// ── inbox triage (M4, PRD A5) ───────────────────────────────────────────────
+
+/** Untriaged captures (design_id IS NULL), newest first. */
+export const fetchInbox = () => api<Media[]>('/inbox')
+
+/** Assign an inbox capture to a design + phase. The backend creates the
+ *  carrying entry; a re-triage of the same media is a 404 (no longer in inbox). */
+export const triageMedia = (mediaId: string, design_id: string, phase: Phase) =>
+  api<Media>(`/inbox/${mediaId}/triage`, {
+    method: 'POST',
+    body: JSON.stringify({ design_id, phase }),
+  })
+
 // ── share links (M3, TDD §4) ────────────────────────────────────────────────
 
 export const SCOPES = ['finals', 'full'] as const

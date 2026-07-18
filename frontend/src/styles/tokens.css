@@ -53,6 +53,7 @@ html,body{background:var(--bg);color:var(--ink);font-family:'Space Grotesk',syst
 .detail-grid,.detail-grid>*,
 .studio-grid,.studio-grid>*,
 .proj-row,.proj-row>*,
+.ib-list,.ib-list>*,.inbox,.inbox>*,
 .dgrid,.dgrid>*,
 .hdr,.hdr>*,
 .detail-hero,.sg-rail,.sg-pal,.sg-canvas,

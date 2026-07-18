@@ -16,8 +16,8 @@
 | M1 | Foundation | **DONE** (committed; "real URL" DoD still pending deploy accounts). |
 | M2 | Archive core | **DONE + verified** — backend proven end-to-end, 67-test pytest suite, Barrel Bag 001 seeded via the real API, frontend built and browser-verified, thumbnails live. |
 | M3 | Gallery + share link | **DONE + verified** — 84-test suite, public page proven in a logged-out browser at 390px. DoD ("link opens for someone with no account") met locally; needs the M1 deploy for a real public URL. |
-| M4 | PWA + inbox triage UI | Not started (inbox API exists + 3 real untriaged fixtures; share-target manifest is in). |
-| M5–M8 | Wada Studio | Not started. Schema already migrated. |
+| M4 | PWA + inbox triage UI | **UI DONE + verified** — Home unsorted-count row + triage sheet (46/46 browser checks + orchestrator live re-drive). Remaining for M4 close: share-target E2E (needs deployed HTTPS PWA), "already in archive" dedupe notice, design-system pass. |
+| M5–M8 | Wada Studio | **Foundations DONE + verified** — Sanzo corpus seeded (159/348), faceted /palettes API live, §8.3–8.8 permutation/trie/cost engine with every TDD table cell as a named test (suite now 128). Next: M5 segmentation + mask refinement (critical path per M0 findings). |
 
 ## What exists and is verified working
 
@@ -77,6 +77,22 @@
   `/s/reibyrei-4139` (project finals), `/s/reibyrei-mupd` (project full),
   `/s/barrelbag001-tax7` + `-c8d9` (design finals/full); `barrelbag001-j9wj`
   revoked (404 fixture). Reusable seed flow in session-2 scratch artifacts.
+- **Inbox triage (M4 UI):** Home `.inbox` row (real unsorted count, thumbnail
+  stack, empty→"all sorted") → `/inbox` triage view: item cards + triage sheet
+  (design picker from real data, phase chips w/ sensible defaults, confirm
+  gating, error toasts). One real fixture triaged end-to-end in verification
+  (inbox now 2; Barrel Bag 001 gained the moodboard entry).
+- **Wada foundations (not gated on M0):** `app/wada/` — `color.py` (hex→CIELAB
+  D65, CIEDE2000 pinned to Sharma reference pairs, hue/temp facet heuristics),
+  `permutations.py` (§8.3–8.8: injective/exact/surjective counting, darkest-
+  first chains, trie prefix counting, capped-12/eager-2 farthest-point
+  selection, twin dedupe groups, Decimal cost math @6.75¢ default,
+  `plan_study()`), `seed_sanzo.py` (idempotent, vendored corpus). `GET
+  /palettes` (all §9 facets + `?slots=` preview), `GET /palettes/{id}` (+
+  similar = nearest mean-Lab, same color_count). NOTE: the migrated
+  combinations table is named `palettes` (0001 DDL verbatim). Corpus Lab is
+  recomputed from hex (D65) — the corpus's own CMYK-derived Lab disagrees with
+  its hex by up to ΔE≈20; switchable at seed time if print-fidelity preferred.
 - **`LONGTERM-NEEDS.md`** (repo root): full external-dependency / cost /
   setup-order assessment, all prices cited as of 2026-07-16. Headline: 6
   accounts total, ~$9.3/mo fixed (Hetzner+R2), Wada <$2 target holds,
