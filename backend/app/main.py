@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from app import auth
 from app.config import get_settings
 from app.db import engine
-from app.routers import designs, entries, media, palettes, projects, regions, share
+from app.routers import designs, entries, media, palettes, projects, regions, share, studies
 
 
 @asynccontextmanager
@@ -51,6 +51,9 @@ _FK_SUFFIX_ENTITY = {
     "_entry_id_fkey": "entry",
     "_media_id_fkey": "media",
     "_cover_fk": "media",
+    "_palette_id_fkey": "palette",
+    "_study_id_fkey": "study",
+    "_anchor_color_id_fkey": "sanzo colour",
 }
 
 
@@ -74,6 +77,7 @@ app.include_router(entries.router)
 app.include_router(media.router)
 app.include_router(palettes.router)
 app.include_router(regions.router)
+app.include_router(studies.router)
 app.include_router(share.router)
 app.include_router(share.public_router)  # TDD §4: separate router, NO auth dependency
 
