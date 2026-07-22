@@ -5,7 +5,7 @@ import {
   api, STATUSES, STATUS_CLASS, STATUS_LABELS,
   type Design, type DesignStatus, type Project as ProjectT,
 } from '../lib/api'
-import { useShare } from '../lib/store'
+import { useNewDesign, useShare } from '../lib/store'
 
 const FALLBACK_ART = 'linear-gradient(150deg,#DCE4EE,#B9C6D8 55%,#8FA2BC)'
 
@@ -13,6 +13,7 @@ export default function Project() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
   const openShare = useShare(s => s.openShare)
+  const openNewDesign = useNewDesign(s => s.openNewDesign)
   const [status, setStatus] = useState<'all' | DesignStatus>('all')
 
   const { data: projects } = useQuery({
@@ -26,9 +27,12 @@ export default function Project() {
     queryKey: ['designs', projectId, 'all'],
     queryFn: () => api<Design[]>(`/projects/${projectId}/designs`),
   })
-  // status chips drive a real ?status= query (the API filter)
+  // status chips drive a real ?status= query (the API filter).
+  // NB: the key must NOT collide with the 'all' query above — when status==='all'
+  // a shared key would let this (disabled) queryFn win a refetch after
+  // invalidation and fire ?status=all → 422.
   const filtered = useQuery({
-    queryKey: ['designs', projectId, status],
+    queryKey: ['designs', projectId, 'status', status],
     queryFn: () => api<Design[]>(`/projects/${projectId}/designs?status=${status}`),
     enabled: status !== 'all',
     placeholderData: keepPreviousData,
@@ -95,40 +99,54 @@ export default function Project() {
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', padding: '18px 4px' }}>
             Loading…
           </div>
-        ) : !designs?.length ? (
-          <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', padding: '18px 4px' }}>
-            Nothing here yet.
-          </div>
         ) : (
-          /* key={status}: the filter changed the CONTENT, so the grid re-animates —
-             correct per TDD §10.2. Within a filter, cards keep stable uuid keys. */
-          <div className="dgrid" id="dgrid" key={status}>
-            {designs.map((d, k) => (
-              <div
-                key={d.id}
-                className="dcard"
-                style={{ animation: 'tileIn .55s var(--ease) both', animationDelay: `${k * 0.06}s` }}
-                onClick={() => navigate(`/d/${d.id}`)}
-              >
-                <div className="card-idx">{String(d.index_no).padStart(3, '0')}</div>
+          <>
+            {!designs?.length && (
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', padding: '18px 4px' }}>
+                Nothing here yet.
+              </div>
+            )}
+            {/* key={status}: the filter changed the CONTENT, so the grid re-animates —
+               correct per TDD §10.2. Within a filter, cards keep stable uuid keys. */}
+            <div className="dgrid" id="dgrid" key={status}>
+              {designs?.map((d, k) => (
                 <div
-                  className="art"
-                  style={{
-                    background: d.cover_url
-                      ? `url(${JSON.stringify(d.cover_url)}) center/cover`
-                      : FALLBACK_ART,
-                  }}
-                />
-                <div className="label">
-                  <div className="dname">{d.name}</div>
-                  <div className={`dstatus ${STATUS_CLASS[d.status]}`}>
-                    <span className="dot" />
-                    {STATUS_LABELS[d.status]}
+                  key={d.id}
+                  className="dcard"
+                  style={{ animation: 'tileIn .55s var(--ease) both', animationDelay: `${k * 0.06}s` }}
+                  onClick={() => navigate(`/d/${d.id}`)}
+                >
+                  <div className="card-idx">{String(d.index_no).padStart(3, '0')}</div>
+                  <div
+                    className="art"
+                    style={{
+                      background: d.cover_url
+                        ? `url(${JSON.stringify(d.cover_url)}) center/cover`
+                        : FALLBACK_ART,
+                    }}
+                  />
+                  <div className="label">
+                    <div className="dname">{d.name}</div>
+                    <div className={`dstatus ${STATUS_CLASS[d.status]}`}>
+                      <span className="dot" />
+                      {STATUS_LABELS[d.status]}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+              {project && (
+                <button
+                  className="dcard dcard-new press"
+                  id="dcard-new"
+                  style={{ animation: 'tileIn .55s var(--ease) both', animationDelay: `${(designs?.length ?? 0) * 0.06}s` }}
+                  onClick={() => openNewDesign({ id: project.id, name: project.name })}
+                >
+                  <div className="plus">+</div>
+                  <div className="t">New design</div>
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

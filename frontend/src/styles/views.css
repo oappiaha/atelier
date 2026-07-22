@@ -92,6 +92,16 @@
 .st-mfg{color:var(--accent);}.st-mfg .dot{background:var(--accent);}
 .st-arch{color:var(--faint);}.st-arch .dot{background:var(--faint);}
 
+/* ghost "add" card at the end of the design grid — same dashed language as the
+   mood-board picker's + tile */
+.dcard.dcard-new{background:transparent;border:1.5px dashed var(--stroke-strong);box-shadow:none;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;
+  min-height:170px;color:var(--faint);transition:color .3s ease,border-color .3s ease;}
+.dcard.dcard-new:hover{color:var(--fog);border-color:var(--fog);box-shadow:none;}
+.dcard-new .plus{font-size:22px;font-weight:300;line-height:1;}
+.dcard-new .t{font-family:'DM Mono';font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;}
+@media(min-width:900px){.dcard.dcard-new{min-height:190px;}}
+
 /* ── DESIGN DETAIL ── */
 .detail-grid{display:grid;gap:22px;}
 @media(min-width:900px){.detail-grid{grid-template-columns:5fr 6fr;align-items:start;gap:32px;}

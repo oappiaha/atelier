@@ -1,0 +1,120 @@
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { api, STATUSES, STATUS_LABELS, type Design, type DesignStatus } from '../lib/api'
+import { toast, useNewDesign } from '../lib/store'
+
+/** New-design sheet: name (required) + optional materials and status.
+ *  POST /designs assigns index_no automatically and defaults to 'developing';
+ *  a non-default status is applied with a follow-up PATCH. */
+export default function NewDesignSheet() {
+  const { open, project, closeNewDesign } = useNewDesign()
+  const qc = useQueryClient()
+
+  const [name, setName] = useState('')
+  const [materials, setMaterials] = useState('')
+  const [status, setStatus] = useState<DesignStatus>('developing')
+  const [busy, setBusy] = useState(false)
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  // reset on every open; focus once the slide-up transition has started
+  useEffect(() => {
+    if (open) {
+      setName('')
+      setMaterials('')
+      setStatus('developing')
+      setBusy(false)
+      const t = setTimeout(() => nameRef.current?.focus(), 80)
+      return () => clearTimeout(t)
+    }
+  }, [open])
+
+  const create = async () => {
+    if (!project || !name.trim() || busy) return
+    setBusy(true)
+    try {
+      let d = await api<Design>('/designs', {
+        method: 'POST',
+        body: JSON.stringify({
+          project_id: project.id,
+          name: name.trim(),
+          materials: materials.trim() || null,
+        }),
+      })
+      if (status !== 'developing') {
+        d = await api<Design>(`/designs/${d.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        })
+      }
+      qc.invalidateQueries({ queryKey: ['designs', project.id] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      toast(`${d.name} · No. ${String(d.index_no).padStart(3, '0')}`)
+      closeNewDesign()
+    } catch (e) {
+      toast(e instanceof Error && e.message ? `Failed: ${e.message.slice(0, 80)}` : 'Create failed')
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-newdesign">
+      <div className="backdrop" onClick={closeNewDesign} />
+      <div className="sheet">
+        <div className="grabber" />
+        <div className="syne" style={{ fontSize: 18, fontWeight: 700, marginBottom: 3 }}>
+          New design
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--fog)', marginBottom: 12 }}>
+          {project ? `Joins the ${project.name} index — ` : ''}the index number is assigned automatically.
+        </div>
+
+        <form
+          onSubmit={e => {
+            e.preventDefault()
+            create()
+          }}
+        >
+          <input
+            ref={nameRef}
+            className="field"
+            id="nd-name"
+            placeholder="Name — e.g. Saddle Tote"
+            value={name}
+            onChange={e => setName(e.target.value)}
+          />
+          <textarea
+            className="field"
+            id="nd-materials"
+            placeholder="Materials (optional) — e.g. vegetable-tanned leather, brass"
+            value={materials}
+            onChange={e => setMaterials(e.target.value)}
+            style={{ marginTop: 9, minHeight: 64 }}
+          />
+
+          <div className="chips" style={{ marginTop: 10 }}>
+            {STATUSES.map(s => (
+              <button
+                key={s}
+                type="button"
+                className={`chip${status === s ? ' on' : ''}`}
+                onClick={() => setStatus(s)}
+              >
+                {STATUS_LABELS[s]}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="submit"
+            className="primary-btn press"
+            id="nd-create"
+            disabled={busy || !name.trim()}
+            style={!name.trim() ? { opacity: 0.5 } : undefined}
+          >
+            {busy ? 'Creating…' : 'Create design'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}

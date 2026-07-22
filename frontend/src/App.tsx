@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { getToken } from './lib/api'
 import { useCapture } from './lib/store'
 import CaptureSheet from './components/CaptureSheet'
+import NewDesignSheet from './components/NewDesignSheet'
 import ShareSheet from './components/ShareSheet'
 import Toast from './components/Toast'
 
@@ -82,6 +83,7 @@ export default function App() {
       </nav>
 
       <CaptureSheet />
+      <NewDesignSheet />
       <ShareSheet />
       <Toast />
     </div>

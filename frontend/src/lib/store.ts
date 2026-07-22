@@ -67,6 +67,28 @@ export const useShare = create<ShareState>(set => ({
   closeShare: () => set({ open: false }),
 }))
 
+// ── new-design sheet (M4) ────────────────────────────────────────────────────
+
+export interface ProjectCtx {
+  id: string
+  name: string
+}
+
+interface NewDesignState {
+  open: boolean
+  /** project the design will be created in (set by the Project view) */
+  project: ProjectCtx | null
+  openNewDesign: (project: ProjectCtx) => void
+  closeNewDesign: () => void
+}
+
+export const useNewDesign = create<NewDesignState>(set => ({
+  open: false,
+  project: null,
+  openNewDesign: project => set({ open: true, project }),
+  closeNewDesign: () => set({ open: false }),
+}))
+
 export const useCapture = create<CaptureState>((set, get) => ({
   open: false,
   designCtx: null,
