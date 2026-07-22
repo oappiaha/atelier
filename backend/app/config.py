@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # public share-link router (TDD §4: "Rate limited to 60 req/min per IP")
     share_rate_limit_per_min: int = 60
 
+    # model providers (Wada). Worker-only per TDD §1.2; unset -> segmentation
+    # tasks no-op with a logged skip instead of crashing.
+    gemini_api_key: str | None = None
+    fal_api_key: str | None = None
+
     sentry_dsn: str | None = None
 
 

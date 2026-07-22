@@ -17,7 +17,7 @@
 | M2 | Archive core | **DONE + verified** — backend proven end-to-end, 67-test pytest suite, Barrel Bag 001 seeded via the real API, frontend built and browser-verified, thumbnails live. |
 | M3 | Gallery + share link | **DONE + verified** — 84-test suite, public page proven in a logged-out browser at 390px. DoD ("link opens for someone with no account") met locally; needs the M1 deploy for a real public URL. |
 | M4 | PWA + inbox triage UI | **UI DONE + verified** — Home unsorted-count row + triage sheet (46/46 browser checks + orchestrator live re-drive). Remaining for M4 close: share-target E2E (needs deployed HTTPS PWA), "already in archive" dedupe notice, design-system pass. |
-| M5–M8 | Wada Studio | **Foundations DONE + verified** — Sanzo corpus seeded (159/348), faceted /palettes API live, §8.3–8.8 permutation/trie/cost engine with every TDD table cell as a named test (suite now 128). Next: M5 segmentation + mask refinement (critical path per M0 findings). |
+| M5–M8 | Wada Studio | **Foundations + segmentation DONE** — Sanzo corpus (159/348), /palettes API, §8.3–8.8 engine; **M5 segmentation live**: POST /media/{id}/segment (Celery `wada` queue, idempotent/cached) + GET regions, chroma-weighted GrabCut mask refinement. **Seam verdict: PASS** — ghost fraction 49%→4% (Bellypack) / 42%→13% (Duffle) with +2px dilation; M7 unblocked. Both real product photos segmented (5+8 regions). Suite 139. Next: M5-T2 studies/slots/estimate API, M5-T3 Slot Composer UI. |
 
 ## What exists and is verified working
 
