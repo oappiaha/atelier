@@ -28,6 +28,10 @@ TEST_BUCKET = "atelier-test"
 os.environ["DATABASE_URL"] = f"postgresql+asyncpg://atelier:atelier@localhost:5433/{TEST_DB}"
 os.environ["S3_BUCKET"] = TEST_BUCKET
 os.environ["REDIS_URL"] = "redis://localhost:6380/1"
+# never let the suite spend: backend/.env carries a real PhotoRoom key, and
+# env vars override the .env file — blank means cutout tasks skip unless a
+# test monkeypatches the setting and mocks the HTTP boundary
+os.environ["PHOTOROOM_API_KEY"] = ""
 
 import uuid  # noqa: E402
 

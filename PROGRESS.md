@@ -124,6 +124,12 @@
   (Small frontend task; wire into CaptureSheet + share-target flow in M4.)
 - **PhotoRoom policy:** auto-run background removal ONLY for final/editorial
   phase photos; manual "remove background" action elsewhere. (When un-held.)
+- **PhotoRoom × Wada (Beezy, 2026-07-26): every image entering Wada Studio
+  gets a PhotoRoom background-removal cutout first** — the cutout (not the
+  original) is the segmentation/generation base. Once per image, cached by
+  sha (cutout_key, migration 0002), Basic tier $0.02/img in prod, sandbox
+  (free, watermarked) for dev. This by-design neutralizes the busy-background
+  segmentation risk flagged after M5.
 - **Wada 2K export (M8):** free local upscale of the stored 1536px colorway by
   default; paid 2048px re-generation (~$0.135) offered as an explicit option.
 
@@ -184,9 +190,22 @@ cd backend && .venv/bin/python -m pytest      # 67 tests, isolated infra
   stored commented-out (activating it switches local auth to real email sends).
 - **3 real product photos** → the only remaining M0 blocker.
 - Domain + Resend domain verification (SPF/DKIM) → deploy time.
-- Fly.io account → deploy (M1's "real URL" DoD; the Fly setup needs a Celery
-  worker process alongside the API for thumbs/Wada). Storage: R2 or Tigris —
-  Cloudflare optional, see "Added scope".
+- ~~Hosting account~~ DECIDED 2026-07-26: deploy to **Beezy's existing
+  DigitalOcean VPS** (not Hetzner/Fly — those were only price recommendations).
+  Storage: **R2 bucket exists** — endpoint
+  `https://cd9a62a2a39a92e367d64c03ecb9cbf0.r2.cloudflarestorage.com/atelier`
+  (account id is in the URL; bucket `atelier`). Domain: **Namecheap** (DNS can
+  stay at Namecheap — R2/S3 API needs no Cloudflare DNS; just an A record to
+  the droplet). Prod stack = compose minus MinIO (R2 replaces it): PG + Redis
+  + API + Celery worker + Caddy/nginx for TLS.
+- Droplet: DigitalOcean, public IP **137.184.211.55** (private 10.116.0.2).
+  SSH as root@ from this Mac: permission denied — Beezy must add this Mac's
+  key to the droplet (`~/.ssh/id_ed25519.pub`, the ooappiahagyeman ed25519
+  one) or provide the right user/alias.
+- Still needed from Beezy for the deploy run: (1) R2 API token — Access Key ID
+  + Secret scoped to the `atelier` bucket (Cloudflare dash → R2 → Manage API
+  Tokens); (2) which domain/subdomain to use; (3) SSH access per above + what
+  else runs on the droplet / its RAM; (4) rotate all keys that transited chat.
 - PhotoRoom API key (sandbox tier fine for dev) → background-removal pipeline.
 - Product calls on the dedupe/share-target semantics above before M4, and on
   whether PhotoRoom runs on all uploads or only final/editorial + on-demand.

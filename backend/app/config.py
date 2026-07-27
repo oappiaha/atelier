@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     fal_api_key: str | None = None
 
+    # PhotoRoom background removal (worker-only, like the model keys). With
+    # photoroom_sandbox=True the key is used in sandbox mode (free tier,
+    # watermarked output — dev only; prod flips the flag to spend Basic-tier
+    # credits, $0.02/img).
+    photoroom_api_key: str | None = None
+    photoroom_sandbox: bool = True
+
     sentry_dsn: str | None = None
 
 

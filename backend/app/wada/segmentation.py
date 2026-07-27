@@ -72,6 +72,36 @@ def working_image(original: bytes) -> Image.Image:
     return img
 
 
+def working_image_and_alpha(source: bytes) -> tuple[Image.Image, "np.ndarray | None"]:
+    """Cutout-aware PREPARE: the RGB working image plus, when the source has
+    an alpha channel (a PhotoRoom cutout), the boolean product-coverage mask
+    in the same working frame (True = opaque/product). Sources without alpha
+    (originals) return (working_image(source), None).
+
+    Transparent background is flattened onto WHITE — a clean studio sweep is
+    the look Gemini segments best, and it avoids feeding the model whatever
+    RGB values happen to sit under the transparent pixels.
+    """
+    import io
+
+    img = Image.open(io.BytesIO(source))
+    img = ImageOps.exif_transpose(img)
+    if "A" not in img.getbands() and "transparency" not in img.info:
+        return working_image(source), None
+    img = img.convert("RGBA")
+    long_edge = max(img.size)
+    if long_edge > WORKING_LONG_EDGE:
+        scale = WORKING_LONG_EDGE / long_edge
+        img = img.resize(
+            (max(1, round(img.width * scale)), max(1, round(img.height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+    alpha = np.asarray(img)[..., 3] > 8
+    flat = Image.new("RGB", img.size, (255, 255, 255))
+    flat.paste(img, mask=img.getchannel("A"))
+    return flat, alpha
+
+
 def call_gemini(image: Image.Image, api_key: str) -> tuple[str, dict]:
     """ONE segmentation call (TDD §8.1: once per image, ever — the caller
     enforces the caching). Returns (raw_text, usage/latency metadata).

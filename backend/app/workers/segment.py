@@ -32,6 +32,7 @@ from PIL import Image
 from app.config import get_settings
 from app.storage import get_s3
 from app.wada import refine, segmentation
+from app.workers import cutout
 from app.workers.celery_app import celery_app
 
 logger = logging.getLogger(__name__)
@@ -100,9 +101,21 @@ def _segment(media_id: str, settings) -> str:
 
     s3 = get_s3()
     bucket = settings.s3_bucket
-    original = s3.get_object(Bucket=bucket, Key=r2_key)["Body"].read()
-    img = segmentation.working_image(original)
+
+    # Product decision (PhotoRoom × Wada, 2026-07-26): segmentation runs on
+    # the background-removal CUTOUT, not the original — this neutralizes the
+    # busy-background risk by design. ensure_cutout is synchronous here (we
+    # are already inside a Celery task) and best-effort: a PhotoRoom failure
+    # degrades to the original image instead of blocking segmentation.
+    # Existing regions are never touched — the cache checks above make this
+    # a new-segmentations-only behavior change.
+    cutout_key = cutout.ensure_cutout(media_id)
+    source_key = cutout_key or r2_key
+    source = s3.get_object(Bucket=bucket, Key=source_key)["Body"].read()
+    img, alpha = segmentation.working_image_and_alpha(source)
     w, h = img.size
+    logger.info("media=%s segmenting from %s (alpha=%s)", media_id, source_key,
+                alpha is not None)
 
     raw_text, meta = segmentation.call_gemini(img, settings.gemini_api_key)
     logger.info(
@@ -134,6 +147,13 @@ def _segment(media_id: str, settings) -> str:
     for idx, region in enumerate(kept):
         coarse = segmentation.polygon_to_mask(region.polygon, w, h)
         refined, info = refine.refine_mask(image_arr, coarse)
+        if alpha is not None:
+            # exploit the cutout's alpha: PhotoRoom already decided what is
+            # background, so no region pixel may fall outside the product.
+            # (GrabCut seeding itself is left unchanged — the intersection is
+            # the provable win; reseeding showed no measurable gain on the
+            # near-clean fixtures and risks perturbing locked behavior.)
+            refined &= alpha
         if not refined.any():
             logger.warning("media=%s region %d (%s): empty mask, skipped", media_id, idx,
                            region.label)

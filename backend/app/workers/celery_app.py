@@ -9,7 +9,7 @@ celery_app = Celery(
     "atelier",
     broker=get_settings().redis_url,
     backend=get_settings().redis_url,
-    include=["app.workers.thumbs", "app.workers.segment"],
+    include=["app.workers.thumbs", "app.workers.segment", "app.workers.cutout"],
 )
 celery_app.conf.task_acks_late = True
 celery_app.conf.worker_prefetch_multiplier = 1

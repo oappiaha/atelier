@@ -66,6 +66,7 @@ class MediaOut(BaseModel):
     phase: str | None
     url: str
     thumb_url: str | None
+    cutout_url: str | None = None  # PhotoRoom cutout (additive, WADA-CUT)
     width: int | None
     height: int | None
     duration_ms: int | None
@@ -80,6 +81,7 @@ def _media_out(r) -> MediaOut:
         id=r.id, design_id=r.design_id, entry_id=r.entry_id, kind=r.kind, phase=r.phase,
         url=presign_get(r.r2_key),
         thumb_url=presign_get(r.thumb_key) if r.thumb_key else None,
+        cutout_url=presign_get(r.cutout_key) if r.cutout_key else None,
         width=r.width, height=r.height, duration_ms=r.duration_ms,
         caption=r.caption, source_url=r.source_url, source_app=r.source_app,
         created_at=r.created_at,
