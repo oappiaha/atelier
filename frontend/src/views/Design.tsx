@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
-  api, PHASES, PHASE_LABELS, STATUS_CLASS, STATUS_LABELS,
+  api, apiErrorDetail, createStudy, fetchRegions, fetchStudy, forgetStudy,
+  recallStudy, rememberStudy, segmentMedia,
+  DEFAULT_PALETTE_ID, PHASES, PHASE_LABELS, STATUS_CLASS, STATUS_LABELS,
   type Design as DesignT, type Entry, type Media, type Phase, type Project as ProjectT,
 } from '../lib/api'
 import Lightbox from '../components/Lightbox'
@@ -233,6 +235,61 @@ export default function Design() {
     if (items.length) setLb({ items, index, phaseLabel })
   }
 
+  // ── WADA STUDIO entry: reopen the remembered study, or create one on the
+  // design's photo. Regions come from the cache; POST /segment + poll is the
+  // non-crashing fallback for a photo that was never segmented. ──
+  const [studioBusy, setStudioBusy] = useState(false)
+  const openStudio = async () => {
+    if (!designId || studioBusy) return
+    setStudioBusy(true)
+    try {
+      // 1) a study we already opened for this design?
+      const memo = recallStudy(designId)
+      if (memo) {
+        try {
+          const s = await fetchStudy(memo)
+          navigate(`/d/${designId}/study/${s.id}`)
+          return
+        } catch {
+          forgetStudy(designId) // stale memo (deleted study) — fall through
+        }
+      }
+      // 2) find a photo with regions (cached segmentation)
+      const imgs = (media.data ?? []).filter(m => m.kind === 'image')
+      if (!imgs.length) {
+        toast('Add a product photo first')
+        return
+      }
+      let base: Media | null = null
+      for (const m of imgs) {
+        if ((await fetchRegions(m.id)).length) { base = m; break }
+      }
+      // 3) fallback: segment the first photo and poll until the worker lands
+      if (!base) {
+        toast('Finding regions…')
+        for (let i = 0; i < 20; i++) {
+          const out = await segmentMedia(imgs[0].id)
+          if (out.status === 'complete' && out.regions.length) { base = imgs[0]; break }
+          await new Promise(r => setTimeout(r, 3000))
+        }
+        if (!base) {
+          toast('Segmentation is still running — try again in a minute')
+          return
+        }
+      }
+      // 4) create the draft study and enter the composer
+      const s = await createStudy({
+        design_id: designId, base_media_id: base.id, palette_id: DEFAULT_PALETTE_ID,
+      })
+      rememberStudy(designId, s.id)
+      navigate(`/d/${designId}/study/${s.id}`)
+    } catch (e) {
+      toast(apiErrorDetail(e, 'Could not open the studio'))
+    } finally {
+      setStudioBusy(false)
+    }
+  }
+
   const d = design.data
 
   return (
@@ -303,9 +360,9 @@ export default function Design() {
               ))}
             </div>
             <div className="actions">
-              <button className="action press" onClick={() => toast('Wada Studio — coming in V1.5')}>
+              <button className="action press" id="open-studio" onClick={openStudio} disabled={studioBusy}>
                 <div className="a-eyebrow" style={{ color: 'var(--accent)' }}>WADA STUDIO</div>
-                <div className="a-t">Explore colorways</div>
+                <div className="a-t">{studioBusy ? 'Opening…' : 'Explore colorways'}</div>
               </button>
               <button className="action press" onClick={() => toast('3D — future flex')}>
                 <div className="a-eyebrow" style={{ color: 'var(--faint)' }}>VIEW</div>
