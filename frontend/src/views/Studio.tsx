@@ -363,6 +363,12 @@ export default function Studio() {
                         key={`p-${r.id}`}
                         className="rg-probe"
                         data-rg-probe={r.id}
+                        // CORS-mode fetch keeps the cache entry usable by the CSS
+                        // mask-image fetch (also CORS-mode). Without this, R2's
+                        // no-Origin response (no ACAO, no Vary: Origin) poisons the
+                        // cache and Chromium blocks the mask -> region tints break.
+                        // MinIO masked this in dev by sending ACAO:* on everything.
+                        crossOrigin="anonymous"
                         src={r.mask_url}
                         alt=""
                         onLoad={e => {

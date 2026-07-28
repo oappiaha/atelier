@@ -13,7 +13,7 @@
 | M | Scope | Status |
 |---|-------|--------|
 | M0 | Seedream vs Nano Banana bake-off | **DONE 2026-07-18** — ran on 2 real photos (3rd pending, non-blocking), $1.37 spent of $10 cap. **Primary adapter: Seedream 5.0 Pro** (`bytedance/seedream/v5/pro/edit` — no `fal-ai/` prefix); NB2 is a real fallback (3x faster @12.5s → eager/preview drafts + vendor insurance). Full report + 14 outputs in session scratch `atelier-m0/t1/bakeoff-report.md`. |
-| M1 | Foundation | **DONE** (committed; "real URL" DoD still pending deploy accounts). |
+| M1 | Foundation | **DONE incl. real URL** — deployed 2026-07-27 to **https://wada.garden** (DO droplet 137.184.211.55, coexists with reibyrei.team + mission-control; nginx site + certbot TLS to 2026-10-25; containers on 127.0.0.1:8010, R2 storage, fresh prod secrets, nightly pg_dump cron, 2G swap). Full data parity with dev (101/101 objects ETag-matched). Login = magic link fished from `docker logs atelier-api-1` on the droplet until Resend domain verify. Follow-ups: key rotation, Resend, Sentry/uptime, R2 lifecycle rules. |
 | M2 | Archive core | **DONE + verified** — backend proven end-to-end, 67-test pytest suite, Barrel Bag 001 seeded via the real API, frontend built and browser-verified, thumbnails live. |
 | M3 | Gallery + share link | **DONE + verified** — 84-test suite, public page proven in a logged-out browser at 390px. DoD ("link opens for someone with no account") met locally; needs the M1 deploy for a real public URL. |
 | M4 | PWA + inbox triage UI | **UI DONE + verified** — Home unsorted-count row + triage sheet (46/46 browser checks + orchestrator live re-drive). Remaining for M4 close: share-target E2E (needs deployed HTTPS PWA), "already in archive" dedupe notice, design-system pass. |
