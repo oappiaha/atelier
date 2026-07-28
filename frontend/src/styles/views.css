@@ -394,6 +394,74 @@ textarea.field{min-height:84px;resize:none;}
   background:var(--bg-deep);border:1px solid var(--stroke);color:var(--fog);}
 .regime-pill.amber{color:var(--warn);border-color:rgba(178,106,0,.3);}
 
+/* ── WADA CONTACT SHEET (M7-T3, TDD §8.13.2): cards, fingerprints, ghosts ── */
+.studio-tabs{display:flex;gap:8px;margin:10px 0 2px;}
+/* generate confirm affordance (inline, both the est panel + sheet head) */
+.gen-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-radius:13px;
+  padding:10px 12px;background:var(--bg);border:1px solid var(--accent-line);}
+.gen-confirm.block{display:block;margin-top:12px;}
+.gen-confirm .kbtn{width:auto;height:auto;padding:8px 12px;font-family:'DM Mono';
+  font-size:8.5px;letter-spacing:.1em;}
+.gc-go{background:var(--ink);color:#FFF;border-color:var(--ink);}
+.gc-go:hover{background:#2C3542;}
+.gc-open{width:auto;height:auto;padding:8px 12px;font-family:'DM Mono';
+  font-size:8.5px;letter-spacing:.1em;flex-shrink:0;}
+.gc-open.latched{background:var(--ink);color:#FFF;border-color:var(--ink);}
+
+.cw-sheet{margin-top:12px;min-width:0;}
+.cw-head{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  flex-wrap:wrap;margin-bottom:12px;min-width:0;}
+.cw-live{color:var(--warn);animation:cwPulse 1.6s ease-in-out infinite;}
+@keyframes cwPulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+
+.cw-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;min-width:0;}
+@media(min-width:640px){.cw-grid{grid-template-columns:repeat(3,1fr);gap:12px;}}
+@media(min-width:1100px){.cw-grid{grid-template-columns:repeat(4,1fr);}}
+.cw-card{border-radius:16px;background:var(--card);border:1px solid var(--stroke);
+  box-shadow:var(--s1);overflow:hidden;min-width:0;animation:tileIn .55s var(--ease) both;
+  transition:border-color .3s ease,box-shadow .3s ease;}
+.cw-card.pinned{border-color:var(--accent-line);box-shadow:0 0 0 2px var(--accent-soft),var(--s2);}
+.cw-imgwrap{display:block;width:100%;aspect-ratio:3/4;background:var(--bg-deep);
+  position:relative;overflow:hidden;}
+.cw-img{display:block;width:100%;height:100%;object-fit:cover;}
+.cw-holding{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:8.5px;letter-spacing:.12em;color:var(--faint);padding:8px;text-align:center;}
+.cw-holding.pulse{color:var(--warn);animation:cwPulse 1.6s ease-in-out infinite;}
+/* ghost card: fingerprint + price only, tap to generate (the $0.27 idiom) */
+.cw-card.ghost{background:transparent;border-style:dashed;border-color:var(--stroke-strong);
+  box-shadow:none;}
+.cw-ghostbody{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  width:100%;aspect-ratio:3/4;background:none;}
+.cw-ghostbody:disabled{opacity:.5;cursor:default;}
+.cw-ghostcta{margin-top:10px;font-size:8px;letter-spacing:.12em;color:var(--accent);
+  border:1px solid var(--accent-line);border-radius:999px;padding:6px 10px;}
+/* fingerprint strip — canonical slot order, directly comparable across cards */
+.cw-fp{display:flex;gap:3px;padding:8px 10px 0;}
+.cw-chip{flex:1;height:14px;border-radius:4px;border:1px solid var(--stroke);min-width:0;}
+.cw-chip.lg{height:22px;border-radius:6px;}
+.cw-meta{display:flex;align-items:center;gap:6px;padding:7px 10px 9px;min-width:0;}
+.cw-st{font-family:'DM Mono';font-size:7.5px;letter-spacing:.1em;padding:3px 7px;
+  border-radius:999px;background:var(--bg);border:1px solid var(--stroke);color:var(--faint);
+  flex-shrink:0;}
+.cw-st.ready{color:var(--ok);border-color:rgba(27,127,82,.3);}
+.cw-st.generating{color:var(--warn);border-color:rgba(178,106,0,.3);animation:cwPulse 1.6s ease-in-out infinite;}
+.cw-st.failed{color:#B3261E;border-color:rgba(179,38,30,.3);}
+.cw-card.pinned .cw-st{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft);}
+.cw-pin{margin-left:auto;width:26px;height:26px;border-radius:9px;display:flex;align-items:center;
+  justify-content:center;color:var(--faint);border:1px solid transparent;flex-shrink:0;}
+.cw-pin:hover{border-color:var(--stroke-strong);}
+.cw-pin.on{color:var(--accent);}
+/* colorway lightbox / detail */
+.cwlb{position:fixed;inset:0;z-index:400;background:rgba(13,17,23,.78);
+  display:grid;place-items:center;padding:14px;animation:fadeIn .25s ease both;}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+.cwlb-body{display:flex;flex-direction:column;gap:0;max-width:860px;width:100%;max-height:92dvh;
+  overflow:auto;border-radius:22px;background:var(--card);box-shadow:var(--s3);}
+@media(min-width:760px){.cwlb-body{flex-direction:row;}}
+.cwlb-img{display:block;width:100%;object-fit:contain;background:var(--bg-deep);min-width:0;}
+@media(min-width:760px){.cwlb-img{width:58%;max-height:80dvh;}}
+.cwlb-meta{padding:18px 18px 20px;min-width:0;}
+
 /* ── SHARE (mock: .share-link) ── */
 .share-link{display:flex;align-items:center;justify-content:space-between;gap:9px;border-radius:14px;padding:12px 14px;
   background:var(--bg);border:1px solid var(--stroke);margin-top:12px;min-width:0;}

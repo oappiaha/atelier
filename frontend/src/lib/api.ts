@@ -316,6 +316,109 @@ export interface Estimate {
   message: string
 }
 
+// ── Wada generation (M7, TDD §8.13.2/§9): contact sheet, ghosts, budget ─────
+
+/** One chip of a colorway's fingerprint — ALWAYS canonical slot order. */
+export interface FingerprintChip {
+  slot_idx: number
+  slot_label: string
+  color_id: number
+  hex: string
+  name: string
+}
+
+export interface Colorway {
+  id: string
+  permutation_idx: number
+  mapping: FingerprintChip[]
+  status: 'planned' | 'generating' | 'ready' | 'pinned' | 'rejected' | 'failed'
+  image_url: string | null
+  thumb_url: string | null
+  cost_cents: number
+  cache_hits: number
+  lock_verified: boolean | null
+  latency_ms: number | null
+  rank_score: number
+  is_representative: boolean
+  error: string | null
+}
+
+export interface ColorwaysOut {
+  study_id: string
+  study_status: string
+  actual_cost_cents: number
+  est_cost_cents: number | null
+  planned: number
+  ready: number
+  colorways: Colorway[]
+}
+
+export interface GenerateOut {
+  study_id: string
+  status: string
+  requested: string[]
+  already_ready: number
+  planned: number
+  estimated_cents: number
+}
+
+export interface Budget {
+  today_spent_cents: number
+  daily_cap_cents: number
+  study_cap_cents: number
+  hard_freeze_cents: number
+  remaining_today_cents: number
+  frozen: boolean
+}
+
+export const fetchColorways = (studyId: string) =>
+  api<ColorwaysOut>(`/studies/${studyId}/colorways`)
+/** 202 → the wada worker runs; poll GET /colorways (~3s) — SSE is unbuilt. */
+export const generateStudy = (studyId: string, body: { all?: boolean; colorway_ids?: string[] } = {}) =>
+  api<GenerateOut>(`/studies/${studyId}/generate`, { method: 'POST', body: JSON.stringify(body) })
+/** §8.13.2 ghost card: generate a single deferred permutation on demand. */
+export const generateOne = (studyId: string, colorwayId: string) =>
+  api<GenerateOut>(`/studies/${studyId}/generate-one`, {
+    method: 'POST', body: JSON.stringify({ colorway_id: colorwayId }),
+  })
+export const fetchBudget = () => api<Budget>('/budget')
+/** Palette/policy swap IN PLACE on a draft (M7-T2 killed mint-on-browse). */
+export const patchStudy = (studyId: string, body: { palette_id?: string }) =>
+  api<Study>(`/studies/${studyId}`, { method: 'PATCH', body: JSON.stringify(body) })
+export const fetchDesignStudies = (designId: string) =>
+  api<StudySummary[]>(`/designs/${designId}/studies`)
+
+export interface StudySummary {
+  id: string
+  palette_id: string
+  status: string
+  k: number
+  perm_total: number | null
+  perm_planned: number | null
+  est_cost_cents: number | null
+  actual_cost_cents: number
+  created_at: string
+  completed_at: string | null
+}
+
+/* §9 defines POST /colorways/{id}/pin (copies the object to cw/pinned/) but
+   the backend has not built it yet (M8 gap, flagged in T3 evidence) — until
+   then pins persist client-side, keyed per study. */
+const pinKey = (studyId: string) => `atelier.pins.${studyId}`
+export const loadPins = (studyId: string): string[] => {
+  try {
+    const raw = localStorage.getItem(pinKey(studyId))
+    const arr: unknown = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : []
+  } catch { return [] }
+}
+export const savePins = (studyId: string, ids: string[]) =>
+  localStorage.setItem(pinKey(studyId), JSON.stringify(ids))
+
+/** Model price per trie call (backend COST_CENTS_PER_CALL) — ghost-card price
+ *  tags only; every authoritative number still comes from the API. */
+export const CENTS_PER_CALL = 6.75
+
 export const fetchRegions = (mediaId: string) => api<Region[]>(`/media/${mediaId}/regions`)
 export const segmentMedia = (mediaId: string) =>
   api<SegmentOut>(`/media/${mediaId}/segment`, { method: 'POST' })
@@ -348,12 +451,18 @@ export const rememberStudy = (designId: string, studyId: string) =>
 export const recallStudy = (designId: string) => localStorage.getItem(studyMemoKey(designId))
 export const forgetStudy = (designId: string) => localStorage.removeItem(studyMemoKey(designId))
 
-/** FastAPI errors are {"detail": "..."} — pull the human string for toasts. */
+/** FastAPI errors are {"detail": "..."} — pull the human string for toasts.
+ *  Budget refusals (402) carry a structured detail {error:"budget_cap",
+ *  tier, cap_cents, spent_cents, estimated_cents, message} — surface the
+ *  caps message verbatim. */
 export const apiErrorDetail = (e: unknown, fallback: string): string => {
   if (e instanceof ApiError) {
     try {
       const d = (JSON.parse(e.message) as { detail?: unknown }).detail
       if (typeof d === 'string') return d
+      if (d && typeof d === 'object' && 'message' in d && typeof d.message === 'string') {
+        return d.message
+      }
     } catch { /* not JSON */ }
   }
   return fallback

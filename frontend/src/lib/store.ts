@@ -26,6 +26,18 @@ export const useToast = create<ToastState>((set, get) => ({
 
 export const toast = (msg: string) => useToast.getState().toast(msg)
 
+// ── sheet stacking guard ─────────────────────────────────────────────────────
+// Only one bottom sheet may be open at a time: every open* first closes the
+// others (M5 backlog one-liner). Sheets self-register their closer here.
+
+const sheetClosers = new Map<string, () => void>()
+export const registerSheet = (name: string, close: () => void) => {
+  sheetClosers.set(name, close)
+}
+const closeOtherSheets = (except: string) => {
+  for (const [name, close] of sheetClosers) if (name !== except) close()
+}
+
 // ── capture sheet ────────────────────────────────────────────────────────────
 
 export interface DesignCtx {
@@ -63,9 +75,13 @@ interface ShareState {
 export const useShare = create<ShareState>(set => ({
   open: false,
   target: null,
-  openShare: target => set({ open: true, target }),
+  openShare: target => {
+    closeOtherSheets('share')
+    set({ open: true, target })
+  },
   closeShare: () => set({ open: false }),
 }))
+registerSheet('share', () => useShare.getState().closeShare())
 
 // ── new-design sheet (M4) ────────────────────────────────────────────────────
 
@@ -85,15 +101,22 @@ interface NewDesignState {
 export const useNewDesign = create<NewDesignState>(set => ({
   open: false,
   project: null,
-  openNewDesign: project => set({ open: true, project }),
+  openNewDesign: project => {
+    closeOtherSheets('newDesign')
+    set({ open: true, project })
+  },
   closeNewDesign: () => set({ open: false }),
 }))
+registerSheet('newDesign', () => useNewDesign.getState().closeNewDesign())
 
 export const useCapture = create<CaptureState>((set, get) => ({
   open: false,
   designCtx: null,
   dest: 'inbox',
-  openCapture: () => set({ open: true, dest: get().designCtx ? 'design' : 'inbox' }),
+  openCapture: () => {
+    closeOtherSheets('capture')
+    set({ open: true, dest: get().designCtx ? 'design' : 'inbox' })
+  },
   closeCapture: () => set({ open: false }),
   toggleDest: () => {
     const { designCtx, dest } = get()
@@ -106,3 +129,4 @@ export const useCapture = create<CaptureState>((set, get) => ({
   setDesignCtx: (ctx: DesignCtx | null) =>
     set(s => ({ designCtx: ctx, dest: ctx ? s.dest : 'inbox' })),
 }))
+registerSheet('capture', () => useCapture.getState().closeCapture())

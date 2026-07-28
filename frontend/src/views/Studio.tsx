@@ -1,17 +1,19 @@
-// WADA STUDIO — Slot Composer (M5-T3, PRD §4.2 + TDD §8.13/§10.1).
-// Open a study on a design photo, paint the model-found regions into slots,
-// pick a Sanzo palette, read the live estimate + plain-language K/C pedagogy.
-// Generation itself is M7 — the generate key is present but disabled.
+// WADA STUDIO — Slot Composer + Contact Sheet (M5-T3 → M7-T3, PRD §4.2 +
+// TDD §8.13/§10.1). Paint the model-found regions into slots, pick a Sanzo
+// palette, read the live estimate — then the generate key is REAL (M7):
+// confirm with cost → POST /generate → the contact sheet fills live.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  api, apiErrorDetail, createStudy, estimateStudy, fetchPalette, fetchPalettes,
-  fetchRegions, fetchStudy, putSlots, rememberStudy, MAX_PAINT_SLOTS,
+  api, apiErrorDetail, estimateStudy, fetchPalette, fetchPalettes,
+  fetchRegions, fetchStudy, generateStudy, patchStudy, putSlots,
+  rememberStudy, MAX_PAINT_SLOTS,
   type Design as DesignT, type Estimate, type Media, type Palette,
   type Region, type SlotIn, type Study,
 } from '../lib/api'
 import { toast } from '../lib/store'
+import ContactSheet from '../components/ContactSheet'
 
 interface LocalSlot {
   label: string
@@ -95,6 +97,10 @@ export default function Studio() {
   const hydratedFor = useRef<string | null>(null)
   const estimatedFor = useRef<string | null>(null)
 
+  // compose ⇄ contact sheet: a generated study opens on its sheet (M7)
+  const [mode, setMode] = useState<'compose' | 'sheet'>('compose')
+  const [confirming, setConfirming] = useState(false)
+
   // hydrate local slots from the server exactly once per study id
   useEffect(() => {
     const s = study.data
@@ -109,6 +115,8 @@ export default function Studio() {
     setActive(0)
     setDirty(false)
     setEstimate(null)
+    setMode(s.status === 'draft' ? 'compose' : 'sheet')
+    setConfirming(false)
     if (designId) rememberStudy(designId, s.id)
   }, [study.data, designId])
 
@@ -218,25 +226,37 @@ export default function Studio() {
     setActive(a => Math.min(a, next.length - 1))
   }
 
-  // ── palette switch: §9 has no PATCH — new draft study, slots carried over ──
+  // ── palette switch: PATCH in place (M7-T2 killed mint-on-browse) ───────────
+  // Slots and the studio URL survive; the server clears its stored estimate,
+  // so re-run /estimate right after.
   const swapPalette = useMutation({
-    mutationFn: async (pid: string) => {
-      const s = study.data!
-      const ns = await createStudy({
-        design_id: s.design_id, base_media_id: s.base_media_id, palette_id: pid,
-      })
-      if (slots.length > 0 && slots.every(sl => sl.regionIds.length > 0)) {
-        return putSlots(ns.id, toSlotIn(slots, ns))
-      }
-      return ns
-    },
+    mutationFn: (pid: string) => patchStudy(studyId!, { palette_id: pid }),
     onSuccess: ns => {
       qc.setQueryData(['study', ns.id], ns)
-      if (designId) rememberStudy(designId, ns.id)
       toast(`Palette → #${ns.palette_id}`)
-      navigate(`/d/${designId}/study/${ns.id}`, { replace: true })
+      if (ns.k > 0) estimateRef.current()
     },
     onError: e => toast(apiErrorDetail(e, 'Could not switch palette')),
+  })
+
+  // ── generate (M7): confirm-with-cost → POST → the sheet fills live ─────────
+  // Default scope = the policy's eager-N in diversity order (§8.12); deferred
+  // permutations stay browsable as ghost cards on the contact sheet.
+  const generateM = useMutation({
+    mutationFn: () => generateStudy(studyId!),
+    onSuccess: out => {
+      setConfirming(false)
+      setMode('sheet')
+      toast(out.requested.length
+        ? `Generating ${out.requested.length} colorway${out.requested.length === 1 ? '' : 's'} · ≤$${(out.estimated_cents / 100).toFixed(2)}`
+        : `${out.already_ready} already generated — opening the sheet`)
+      qc.invalidateQueries({ queryKey: ['study', studyId] })
+      qc.invalidateQueries({ queryKey: ['colorways', studyId] })
+    },
+    onError: e => {
+      setConfirming(false)
+      toast(apiErrorDetail(e, 'Could not start generation'))
+    },
   })
 
   // ── derived ────────────────────────────────────────────────────────────────
@@ -292,8 +312,27 @@ export default function Studio() {
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', padding: '18px 4px' }}>
             Study not found.
           </div>
+        ) : study.data && study.data.status !== 'draft' && mode === 'sheet' ? (
+          <>
+            <div className="studio-tabs rise">
+              <button className="chip" id="tab-compose" onClick={() => setMode('compose')}>
+                COMPOSER
+              </button>
+              <button className="chip on" id="tab-sheet">CONTACT SHEET</button>
+            </div>
+            <ContactSheet studyId={study.data.id} />
+          </>
         ) : (
-          <div className="studio-grid">
+          <>
+            {study.data && study.data.status !== 'draft' && (
+              <div className="studio-tabs rise">
+                <button className="chip on" id="tab-compose">COMPOSER</button>
+                <button className="chip" id="tab-sheet" onClick={() => setMode('sheet')}>
+                  CONTACT SHEET
+                </button>
+              </div>
+            )}
+            <div className="studio-grid">
             {/* ── PALETTE PICKER ── */}
             <div className="sg-pal rise" style={{ animationDelay: '.1s' }}>
               <div className="eyebrow" style={{ marginBottom: 8 }}>
@@ -547,20 +586,49 @@ export default function Studio() {
                     {estimateM.isPending ? 'Estimating…' : 'Paint regions into slots to price the study.'}
                   </div>
                 )}
-                <button className="gen-btn" id="gen-btn" disabled style={{ marginTop: 12, opacity: 0.55, cursor: 'default' }}>
-                  <span style={{ textAlign: 'left' }}>
-                    <span className="syne" style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>Generate colorways</span>
-                    <span className="mono" style={{ display: 'block', fontSize: 9, opacity: 0.7, marginTop: 2 }}>
-                      COMING IN BUILD M7{est ? ` · ${est.planned} colorways · ~$${est.est_cost}` : ''}
+                {confirming && est ? (
+                  <div className="gen-confirm block" id="gen-confirm">
+                    <div style={{ fontSize: 12, lineHeight: 1.6 }}>
+                      Generate <b>{est.eager} of {est.planned}</b> planned colorways now
+                      (~<b>${est.est_cost}</b> for the full sheet, eager first) —
+                      the rest stay browsable as ghost cards, one tap each.
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <button className="kbtn gc-cancel" id="gen-cancel" onClick={() => setConfirming(false)}>
+                        CANCEL
+                      </button>
+                      <button className="kbtn gc-go" id="gen-go" disabled={generateM.isPending} onClick={() => generateM.mutate()}>
+                        {generateM.isPending ? '…' : `GENERATE · ~$${est.est_cost}`}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    className="gen-btn press"
+                    id="gen-btn"
+                    disabled={!est || frozen || generateM.isPending}
+                    style={!est || frozen ? { marginTop: 12, opacity: 0.55, cursor: 'default' } : { marginTop: 12 }}
+                    onClick={() => est && !frozen && setConfirming(true)}
+                  >
+                    <span style={{ textAlign: 'left' }}>
+                      <span className="syne" style={{ display: 'block', fontSize: 14, fontWeight: 600 }}>Generate colorways</span>
+                      <span className="mono" id="gen-sub" style={{ display: 'block', fontSize: 9, opacity: 0.7, marginTop: 2 }}>
+                        {frozen
+                          ? `GENERATED — SEE THE CONTACT SHEET`
+                          : est
+                            ? `${est.planned} colorways · ~$${est.est_cost} · EAGER ${est.eager} FIRST`
+                            : 'PAINT SLOTS TO PRICE THE STUDY'}
+                      </span>
                     </span>
-                  </span>
-                  <svg width="16" height="16" viewBox="0 0 17 17" fill="none">
-                    <path d="M3.5 8.5h10m0 0l-4-4m4 4l-4 4" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </button>
+                    <svg width="16" height="16" viewBox="0 0 17 17" fill="none">
+                      <path d="M3.5 8.5h10m0 0l-4-4m4 4l-4 4" stroke="#FFF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>
