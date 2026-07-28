@@ -51,11 +51,10 @@ from app.auth import Ctx, get_ctx
 from app.db import get_session
 from app.storage import get_s3, presign_get
 from app.wada import permutations as perm
+from app.wada.generation import MODEL_ID, PROMPT_VERSION
 
 router = APIRouter(tags=["studies"])
 
-MODEL_ID = "seedream-5.0-pro"  # M0: primary adapter
-PROMPT_VERSION = "v1"  # bump = full cache invalidation (§2.4)
 SECONDS_PER_CALL = 39  # M0-measured Seedream edit latency
 MAX_PAINT_SLOTS = 8  # pragmatic ceiling; §8.3's cautionary tale stops at K=6
 
@@ -212,6 +211,94 @@ async def _palette_or_404(palette_id: str, session: AsyncSession):
     if row is None:
         raise HTTPException(404, "palette not found")
     return row
+
+
+async def compute_plan(study_row, session: AsyncSession) -> dict:
+    """The §8.4→§8.7 plan for a study, shared verbatim by POST /estimate and
+    POST /generate (M7): the generate route MUST persist exactly the
+    permutations the estimate showed, or the user paid for a different sheet
+    than they approved.
+
+    Returns the engine plan plus the pieces generate needs to persist rows:
+    `mappings` — one {slot_idx: sanzo_color_id} per selected assignment, in
+    diversity order (eager-first), anchored slots included — and the score/
+    signature per assignment for the permutations columns."""
+    slots = await _slots_for(study_row.id, session)
+    paint = [s for s in slots if s.kind == "paint"]
+    if not paint:
+        raise HTTPException(422, "configure slots before estimating")
+
+    palette = await _palette_or_404(study_row.palette_id, session)
+    colors = (
+        await session.execute(
+            text(
+                """
+                SELECT id, lab_l, lab_a, lab_b FROM sanzo_colors
+                WHERE id = ANY(CAST(:ids AS int[]))
+                """
+            ),
+            {"ids": list(palette.color_ids)},
+        )
+    ).all()
+
+    policy = (
+        study_row.policy
+        if isinstance(study_row.policy, dict)
+        else json.loads(study_row.policy)
+    )
+    k, c = len(paint), palette.color_count
+    anchored = [s for s in paint if s.anchor_color_id is not None]
+    k_eff, c_eff = perm.apply_anchors(k, c, len(anchored))
+    if k_eff < 1 or c_eff < 1:
+        raise HTTPException(
+            422, "every slot or colour is anchored — nothing left to permute"
+        )
+
+    # colour indices are darkness ranks: 0 = darkest (L* ascending, id tiebreak)
+    anchored_ids = {s.anchor_color_id for s in anchored}
+    free_colors = [
+        col
+        for col in sorted(colors, key=lambda col: (col.lab_l, col.id))
+        if col.id not in anchored_ids
+    ]
+    labs = [(col.lab_l, col.lab_a, col.lab_b) for col in free_colors]
+    free_slots = [s for s in paint if s.anchor_color_id is None]  # idx order
+    areas = [s.area_fraction for s in free_slots]
+
+    twin_threshold = (
+        policy["twin_threshold"] if policy.get("prune_twins", True) else None
+    )
+    plan = perm.plan_study(
+        labs, areas, cap=policy["cap"], eager=policy["eager"],
+        twin_threshold=twin_threshold,
+    )
+
+    mappings: list[dict[int, int]] = []
+    scores: list[float] = []
+    signatures: list[tuple[float, ...]] = []
+    for a in plan["selected"]:
+        mapping = {s.idx: s.anchor_color_id for s in anchored}
+        for pos, rank_i in enumerate(a):
+            mapping[free_slots[pos].idx] = free_colors[rank_i].id
+        mappings.append(mapping)
+        scores.append(perm.score(a, labs, areas))
+        signatures.append(perm.signature(a, labs, areas))
+
+    return {
+        "slots": slots,
+        "paint": paint,
+        "palette": palette,
+        "policy": policy,
+        "k": k,
+        "c": c,
+        "anchored": anchored,
+        "k_eff": k_eff,
+        "c_eff": c_eff,
+        "plan": plan,
+        "mappings": mappings,
+        "scores": scores,
+        "signatures": signatures,
+    }
 
 
 def _union_mask_key(workspace_id: str, media_sha: str, union_sha: str) -> str:
@@ -460,46 +547,9 @@ async def estimate_study(
     session: AsyncSession = Depends(get_session),
 ) -> EstimateOut:
     study = await _study_or_404(study_id, ctx, session)
-    slots = await _slots_for(study.id, session)
-    paint = [s for s in slots if s.kind == "paint"]
-    if not paint:
-        raise HTTPException(422, "configure slots before estimating")
-
-    palette = await _palette_or_404(study.palette_id, session)
-    colors = (
-        await session.execute(
-            text(
-                """
-                SELECT id, lab_l, lab_a, lab_b FROM sanzo_colors
-                WHERE id = ANY(CAST(:ids AS int[]))
-                """
-            ),
-            {"ids": list(palette.color_ids)},
-        )
-    ).all()
-
-    policy = study.policy if isinstance(study.policy, dict) else json.loads(study.policy)
-    k, c = len(paint), palette.color_count
-    anchored = [s for s in paint if s.anchor_color_id is not None]
-    k_eff, c_eff = perm.apply_anchors(k, c, len(anchored))
-    if k_eff < 1 or c_eff < 1:
-        raise HTTPException(
-            422, "every slot or colour is anchored — nothing left to permute"
-        )
-
-    # colour indices are darkness ranks: 0 = darkest (L* ascending, id tiebreak)
-    anchored_ids = {s.anchor_color_id for s in anchored}
-    labs = [
-        (col.lab_l, col.lab_a, col.lab_b)
-        for col in sorted(colors, key=lambda col: (col.lab_l, col.id))
-        if col.id not in anchored_ids
-    ]
-    areas = [s.area_fraction for s in paint if s.anchor_color_id is None]
-
-    twin_threshold = policy["twin_threshold"] if policy.get("prune_twins", True) else None
-    plan = perm.plan_study(
-        labs, areas, cap=policy["cap"], eager=policy["eager"], twin_threshold=twin_threshold
-    )
+    p = await compute_plan(study, session)
+    policy, plan = p["policy"], p["plan"]
+    k, c, k_eff, c_eff, anchored = p["k"], p["c"], p["k_eff"], p["c_eff"], p["anchored"]
     est = perm.estimate(k_eff, c_eff, cap=policy["cap"])
 
     planned = len(plan["selected"])
@@ -565,3 +615,149 @@ async def estimate_study(
         cap=policy["cap"], cap_exceeded=cap_exceeded, cap_message=cap_message,
         message=message,
     )
+
+
+# ── lifecycle (M7-T2: the §9 gaps) ───────────────────────────────────────────
+#
+# PATCH /studies/{id}      palette swap / policy update IN PLACE — kills the
+#                          Composer's mint-a-new-draft-per-palette workaround
+#                          (M7-T3 must switch the palette browser to PATCH).
+# DELETE /studies/{id}     draft-only; generated studies are spend records.
+# GET /designs/{id}/studies  the list the §9 table implies but never states.
+
+
+class StudyPatch(BaseModel):
+    palette_id: str | None = Field(default=None, min_length=1, max_length=16)
+    policy: PolicyIn | None = None
+
+
+class StudySummary(BaseModel):
+    id: uuid.UUID
+    palette_id: str
+    status: str
+    k: int
+    perm_total: int | None
+    perm_planned: int | None
+    est_cost_cents: int | None
+    actual_cost_cents: int
+    created_at: datetime
+    completed_at: datetime | None
+
+
+@router.patch("/studies/{study_id}", response_model=StudyOut)
+async def patch_study(
+    study_id: uuid.UUID,
+    body: StudyPatch,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> StudyOut:
+    study = await _study_or_404(study_id, ctx, session)
+    if study.status != "draft":
+        raise HTTPException(
+            409, f"a {study.status} study is frozen — palette/policy are part of "
+            "what was generated; create a new study instead"
+        )
+    if body.palette_id is None and body.policy is None:
+        raise HTTPException(422, "nothing to update")
+
+    policy = study.policy if isinstance(study.policy, dict) else json.loads(study.policy)
+    palette_id = study.palette_id
+    if body.palette_id is not None:
+        palette = await _palette_or_404(body.palette_id, session)
+        anchor_ids = [
+            r.anchor_color_id
+            for r in (
+                await session.execute(
+                    text(
+                        "SELECT anchor_color_id FROM slots "
+                        "WHERE study_id = :id AND anchor_color_id IS NOT NULL"
+                    ),
+                    {"id": str(study.id)},
+                )
+            ).all()
+        ]
+        stale = [a for a in anchor_ids if a not in palette.color_ids]
+        if stale:
+            raise HTTPException(
+                422, "an anchored colour is not in the new palette — clear the "
+                "anchor first"
+            )
+        palette_id = body.palette_id
+    if body.policy is not None:
+        policy |= body.policy.model_dump(exclude_none=True)
+        if policy["eager"] > policy["cap"]:
+            raise HTTPException(422, "policy.eager cannot exceed policy.cap")
+
+    # any change invalidates the shown numbers — re-estimate before generating
+    await session.execute(
+        text(
+            """
+            UPDATE studies SET palette_id = :palette_id,
+                   policy = CAST(:policy AS jsonb),
+                   perm_total = NULL, perm_planned = NULL, est_cost_cents = NULL
+            WHERE id = :id
+            """
+        ),
+        {"palette_id": palette_id, "policy": json.dumps(policy), "id": str(study.id)},
+    )
+    await session.commit()
+    row = await _study_or_404(study_id, ctx, session)
+    return await _study_out(row, session)
+
+
+@router.delete("/studies/{study_id}", status_code=204)
+async def delete_study(
+    study_id: uuid.UUID,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    study = await _study_or_404(study_id, ctx, session)
+    if study.status != "draft":
+        raise HTTPException(
+            409, f"only drafts can be deleted (this study is {study.status}); "
+            "generated colorways are spend records"
+        )
+    await session.execute(
+        text("DELETE FROM studies WHERE id = :id"), {"id": str(study.id)}
+    )
+    await session.commit()
+
+
+@router.get("/designs/{design_id}/studies", response_model=list[StudySummary])
+async def list_design_studies(
+    design_id: uuid.UUID,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> list[StudySummary]:
+    design = (
+        await session.execute(
+            text("SELECT id FROM designs WHERE workspace_id = :ws AND id = :id"),
+            {"ws": str(ctx.workspace_id), "id": str(design_id)},
+        )
+    ).one_or_none()
+    if design is None:
+        raise HTTPException(404, "design not found")
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT s.*,
+                       (SELECT COUNT(*) FROM slots
+                        WHERE study_id = s.id AND kind = 'paint') AS k
+                FROM studies s
+                WHERE s.workspace_id = :ws AND s.design_id = :id
+                ORDER BY s.created_at DESC
+                """
+            ),
+            {"ws": str(ctx.workspace_id), "id": str(design_id)},
+        )
+    ).all()
+    return [
+        StudySummary(
+            id=r.id, palette_id=r.palette_id, status=r.status, k=r.k,
+            perm_total=r.perm_total, perm_planned=r.perm_planned,
+            est_cost_cents=r.est_cost_cents, actual_cost_cents=r.actual_cost_cents,
+            created_at=r.created_at, completed_at=r.completed_at,
+        )
+        for r in rows
+    ]

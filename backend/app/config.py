@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     fal_api_key: str | None = None
 
+    # Wada budget guard (TDD §8.11, cents). Checked at estimate, at enqueue,
+    # and inside the worker loop before every model call.
+    budget_study_cap_cents: int = 1000  # $10 per study
+    budget_daily_cap_cents: int = 2500  # $25 per workspace per day
+    budget_hard_freeze_cents: int = 5000  # $50/day -> refuse everything
+
     # PhotoRoom background removal (worker-only, like the model keys). With
     # photoroom_sandbox=True the key is used in sandbox mode (free tier,
     # watermarked output — dev only; prod flips the flag to spend Basic-tier

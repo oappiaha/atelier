@@ -168,7 +168,7 @@ async def test_create_study_draft_with_default_policy(authed, study_setup):
     assert study["status"] == "draft"
     assert study["palette_id"] == "c121"
     assert study["model_id"] == "seedream-5.0-pro"
-    assert study["prompt_version"] == "v1"
+    assert study["prompt_version"] == "v2"  # M7-T1 gate: per-region template
     assert study["policy"] == {  # §8.6 defaults, verbatim
         "mode": "curated", "cap": 12, "anchors": {}, "prune_twins": True,
         "prune_cosmetic": True, "twin_threshold": 8.0, "diversity": True,
