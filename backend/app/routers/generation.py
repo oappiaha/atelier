@@ -171,13 +171,8 @@ async def _freeze_gate(session: AsyncSession, ws: str) -> None:
 
 def _estimate_cents_for(target_mappings: list[dict[int, int]], darkness: dict) -> int:
     """Distinct chain prefixes across the target colorways × 6.75¢ — the §8.8
-    node count if nothing were cached."""
-    prefixes: set[tuple] = set()
-    for mapping in target_mappings:
-        steps = tuple(G.chain_steps(mapping, darkness))
-        for d in range(1, len(steps) + 1):
-            prefixes.add(steps[:d])
-    total = G.COST_CENTS_PER_CALL * len(prefixes)
+    node count if nothing were cached (G.trie_calls: anchors included)."""
+    total = G.COST_CENTS_PER_CALL * G.trie_calls(target_mappings, darkness)
     return int(total.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 

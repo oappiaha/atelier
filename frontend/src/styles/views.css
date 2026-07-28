@@ -482,3 +482,30 @@ textarea.field{min-height:84px;resize:none;}
 .pub .tl-card img{max-height:420px;object-fit:cover;}
 .pub-foot{text-align:center;padding:36px 0 8px;}
 .pub-center{min-height:100dvh;display:grid;place-items:center;padding:16px;}
+
+/* ── M8: 2K export dialog (colorway lightbox) + palette detail sheet ─────── */
+.export-ask{margin-top:12px;padding:12px;border-radius:14px;border:1px solid var(--stroke);
+  background:var(--bg-deep);display:flex;flex-direction:column;gap:8px;min-width:0;}
+.export-opt{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+  padding:10px 12px;border-radius:11px;border:1px solid var(--stroke);background:var(--card);
+  font-size:12px;text-align:left;cursor:pointer;min-width:0;}
+.export-opt:hover{border-color:var(--ink);box-shadow:var(--s1);}
+.export-opt b{font-size:9.5px;letter-spacing:.06em;flex-shrink:0;}
+.export-opt span span{display:block;margin-top:1px;}
+.export-busy{color:var(--warn);animation:cwPulse 1.6s ease-in-out infinite;}
+
+.pal-detail{margin-top:8px;width:100%;padding:5px 0;border-radius:8px;border:1px solid var(--stroke);
+  background:var(--bg-deep);font-size:7.5px;letter-spacing:.14em;color:var(--fog);cursor:pointer;}
+.pal-detail:hover{border-color:var(--ink);color:var(--ink);}
+
+.pald-body{max-width:560px;flex-direction:column;overflow:auto;}
+.pald-meta{padding:20px 18px 22px;min-width:0;}
+.pald-swatches{margin-top:12px;display:flex;flex-direction:column;gap:6px;min-width:0;}
+.pald-sw{display:flex;align-items:center;gap:11px;padding:8px 10px;border-radius:12px;
+  border:1px solid var(--stroke);background:var(--bg-deep);min-width:0;}
+.pald-chip{width:34px;height:34px;border-radius:9px;flex-shrink:0;border:1px solid rgba(13,17,23,.08);}
+.pald-similar{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;min-width:0;}
+@media(min-width:560px){.pald-similar{grid-template-columns:repeat(3,1fr);}}
+.pald-simcard{border-radius:13px;padding:9px;border:1px solid var(--stroke);background:var(--card);
+  text-align:left;cursor:pointer;min-width:0;}
+.pald-simcard:hover{border-color:var(--ink);box-shadow:var(--s1);}

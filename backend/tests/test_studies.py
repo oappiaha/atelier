@@ -499,7 +499,13 @@ async def test_estimate_anchor_cuts_24_to_6(authed, study_setup):
     est = (await authed.post(f"/studies/{study['id']}/estimate")).json()
     assert (est["k"], est["c"], est["anchors"]) == (4, 4, 1)
     assert est["perm_total"] == 6  # effective K=3,C=3
-    assert est["trie_calls_full"] == 15 and est["est_cost"] == "1.01"
+    # M8: the anchor is a REAL chain step (the executor paints it), interleaved
+    # by darkness — c241's anchor (Red Orange, L*50.9) is second-darkest, so
+    # the full trie is 3+3+6+6 = 18 nodes, not the free-space 15 the pre-M8
+    # estimate showed (the undercount flagged in M7-T2).
+    assert est["steps_per_colorway"] == 4
+    assert est["trie_calls_full"] == 18 and est["est_cost"] == "1.22"
+    assert est["naive_calls"] == 24 and est["saved_pct"] == 25
 
 
 async def test_estimate_matches_engine_plan_exactly(authed, study_setup):

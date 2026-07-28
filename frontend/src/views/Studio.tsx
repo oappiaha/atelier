@@ -14,6 +14,7 @@ import {
 } from '../lib/api'
 import { toast } from '../lib/store'
 import ContactSheet from '../components/ContactSheet'
+import PaletteDetail from '../components/PaletteDetail'
 
 interface LocalSlot {
   label: string
@@ -100,6 +101,8 @@ export default function Studio() {
   // compose ⇄ contact sheet: a generated study opens on its sheet (M7)
   const [mode, setMode] = useState<'compose' | 'sheet'>('compose')
   const [confirming, setConfirming] = useState(false)
+  // palette-library detail sheet (M8, PRD W3)
+  const [palDetailId, setPalDetailId] = useState<string | null>(null)
 
   // hydrate local slots from the server exactly once per study id
   useEffect(() => {
@@ -369,6 +372,7 @@ export default function Studio() {
                       if (frozen) { toast('Palette is frozen — study is no longer a draft'); return }
                       swapPalette.mutate(p.id)
                     }}
+                    onDetail={() => setPalDetailId(p.id)}
                   />
                 ))}
               </div>
@@ -630,21 +634,41 @@ export default function Studio() {
             </div>
           </>
         )}
+        {palDetailId && (
+          <PaletteDetail
+            paletteId={palDetailId}
+            activeId={study.data?.palette_id}
+            frozen={frozen}
+            busy={swapPalette.isPending}
+            onUse={id => swapPalette.mutate(id)}
+            onClose={() => setPalDetailId(null)}
+          />
+        )}
       </div>
     </div>
   )
 }
 
 function PalCard({
-  p, on, busy, onPick,
+  p, on, busy, onPick, onDetail,
 }: {
   p: Palette
   on: boolean
   busy: boolean
   onPick: () => void
+  onDetail: () => void
 }) {
+  // div, not button: the M8 DETAIL affordance nests inside (buttons can't nest)
   return (
-    <button className={`pal-card${on ? ' on' : ''}`} data-pal={p.id} onClick={onPick} style={busy ? { opacity: 0.6 } : undefined}>
+    <div
+      className={`pal-card${on ? ' on' : ''}`}
+      data-pal={p.id}
+      role="button"
+      tabIndex={0}
+      onClick={onPick}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick() } }}
+      style={busy ? { opacity: 0.6, cursor: 'pointer' } : { cursor: 'pointer' }}
+    >
       <span className="pal-blocks">
         {p.colors.map(c => (
           <span key={c.id} style={{ background: c.hex, flex: 1 }} title={c.name} />
@@ -652,6 +676,14 @@ function PalCard({
       </span>
       <span className="pal-name" style={{ display: 'block' }}>{p.name}</span>
       <span className="pal-id" style={{ display: 'block' }}>#{p.id} · {p.color_count}-colour · {p.temperature}</span>
-    </button>
+      <button
+        className="pal-detail mono press"
+        data-pal-detail={p.id}
+        aria-label={`Palette ${p.id} detail`}
+        onClick={e => { e.stopPropagation(); onDetail() }}
+      >
+        DETAIL
+      </button>
+    </div>
   )
 }

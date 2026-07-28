@@ -1,14 +1,19 @@
-// WADA STUDIO — Contact Sheet (M7-T3, TDD §8.13.2 + PRD §4).
+// WADA STUDIO — Contact Sheet (M7-T3 → M8, TDD §8.13.2 + PRD §4).
 // The organising view for generated output: colorway cards with fingerprint
 // chips in canonical slot order, live status while the trie executor runs
 // (poll ~3s — §8.13's SSE is unimplemented; polling is the M7 contract),
-// ghost cards for deferred permutations ("$0.27 at a time"), pin winners.
-// Pins persist client-side until §9's POST /colorways/{id}/pin exists (M8).
-import { useEffect, useMemo, useState } from 'react'
+// ghost cards for deferred permutations ("$0.27 at a time").
+// M8: pins are SERVER state (POST /colorways/{id}/pin copies the object to
+// cw/pinned/ — lifecycle-protected, cross-device); T3's localStorage pins
+// migrate to the API once on load. 2K export lives in the lightbox: free
+// local upscale or paid Seedream re-paint, costs shown before confirming.
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  apiErrorDetail, fetchColorways, generateOne, generateStudy, loadPins,
-  savePins, CENTS_PER_CALL, type Colorway, type ColorwaysOut,
+  apiErrorDetail, clearLegacyPins, exportColorway, fetchColorways,
+  generateOne, generateStudy, pinColorway, readLegacyPins, unpinColorway,
+  CENTS_PER_CALL, EXPORT_REGEN_DOLLARS,
+  type Colorway, type ColorwaysOut,
 } from '../lib/api'
 import { toast } from '../lib/store'
 
@@ -17,6 +22,17 @@ const cents = (n: number) => `$${(n / 100).toFixed(2)}`
 /** Conservative per-ghost price tag: one call per chain step (= K slots),
  *  no cache discount — the same shape as the backend's enqueue gate. */
 const ghostCents = (cw: Colorway) => Math.round(cw.mapping.length * CENTS_PER_CALL)
+
+/** Presigned export URL carries content-disposition: attachment — navigating
+ *  it downloads the PNG without leaving the app. */
+const triggerDownload = (url: string) => {
+  const a = document.createElement('a')
+  a.href = url
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
 
 export default function ContactSheet({ studyId }: { studyId: string }) {
   const qc = useQueryClient()
@@ -32,23 +48,53 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
     },
   })
 
-  const [pins, setPins] = useState<string[]>(() => loadPins(studyId))
-  useEffect(() => setPins(loadPins(studyId)), [studyId])
-  const togglePin = (id: string) => {
-    setPins(prev => {
-      const next = prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
-      savePins(studyId, next)
-      return next
-    })
-  }
-
   const [confirmRemaining, setConfirmRemaining] = useState(false)
-  const [detail, setDetail] = useState<Colorway | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const [exportAsk, setExportAsk] = useState(false)
 
   const refetchSoon = () => {
     qc.invalidateQueries({ queryKey: ['colorways', studyId] })
     qc.invalidateQueries({ queryKey: ['study', studyId] })
   }
+
+  // ── pins: server state (M8) ────────────────────────────────────────────────
+  const pinM = useMutation({
+    mutationFn: (cw: Colorway) =>
+      cw.status === 'pinned' ? unpinColorway(cw.id) : pinColorway(cw.id),
+    onSuccess: out => {
+      toast(out.status === 'pinned'
+        ? 'Pinned — copied to cw/pinned/, never expires'
+        : 'Unpinned')
+      refetchSoon()
+    },
+    onError: e => toast(apiErrorDetail(e, 'Could not update the pin')),
+  })
+
+  // one-time migration: T3's localStorage pins → the API (then clear the key)
+  const migratedFor = useRef<string | null>(null)
+  const d = sheetQ.data
+  useEffect(() => {
+    if (!d || migratedFor.current === studyId) return
+    migratedFor.current = studyId
+    const legacy = readLegacyPins(studyId)
+    if (!legacy.length) return
+    const targets = d.colorways.filter(
+      c => legacy.includes(c.id) && c.status === 'ready',
+    )
+    if (!targets.length) {
+      clearLegacyPins(studyId) // stale/already-migrated ids — nothing to sync
+      return
+    }
+    Promise.allSettled(targets.map(c => pinColorway(c.id))).then(results => {
+      if (results.every(r => r.status === 'fulfilled')) {
+        clearLegacyPins(studyId)
+        toast(`Migrated ${targets.length} pin${targets.length === 1 ? '' : 's'} to your account`)
+      } else {
+        toast('Some pins could not be migrated — will retry next visit')
+      }
+      qc.invalidateQueries({ queryKey: ['colorways', studyId] })
+    })
+  }, [d, studyId, qc])
 
   const genRemaining = useMutation({
     mutationFn: () => generateStudy(studyId, { all: true }),
@@ -74,7 +120,18 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
     onError: e => toast(apiErrorDetail(e, 'Could not generate this colorway')),
   })
 
-  const d = sheetQ.data
+  // ── 2K export (M8, PRD W11): $0 upscale | ~$0.135 re-paint ────────────────
+  const exportM = useMutation({
+    mutationFn: ({ id, regenerate }: { id: string; regenerate: boolean }) =>
+      exportColorway(id, regenerate),
+    onSuccess: out => {
+      setExportAsk(false)
+      triggerDownload(out.download_url)
+      toast(`2K PNG ready — ${out.width}×${out.height} · ${out.method === 'upscale' ? 'free' : cents(out.cost_cents)}`)
+    },
+    onError: e => toast(apiErrorDetail(e, '2K export failed')),
+  })
+
   const cws = useMemo(() => d?.colorways ?? [], [d])
   const remaining = useMemo(
     () => cws.filter(c => c.status === 'planned' || c.status === 'failed'),
@@ -82,6 +139,8 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
   )
   const busy = !!d && (d.study_status === 'generating' || cws.some(c => c.status === 'generating'))
   const remainingMax = remaining.reduce((s, c) => s + ghostCents(c), 0)
+  // the lightbox always renders the LIVE row (pin/export update underneath it)
+  const detail = detailId ? cws.find(c => c.id === detailId) ?? null : null
 
   if (sheetQ.isError) {
     return (
@@ -128,7 +187,7 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
 
       <div className="cw-grid" id="cw-grid">
         {cws.map(cw => {
-          const pinned = pins.includes(cw.id)
+          const pinned = cw.status === 'pinned'
           const img = cw.thumb_url ?? cw.image_url
           const isGhost = cw.status === 'planned'
           return (
@@ -160,7 +219,7 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                 <button
                   className="cw-imgwrap press"
                   data-cw-open={cw.permutation_idx}
-                  onClick={() => (cw.status === 'ready' || cw.status === 'pinned') && setDetail(cw)}
+                  onClick={() => (cw.status === 'ready' || cw.status === 'pinned') && setDetailId(cw.id)}
                 >
                   {img && (cw.status === 'ready' || cw.status === 'pinned') ? (
                     <img className="cw-img" src={img} alt={`colorway ${cw.permutation_idx}`} loading="lazy" />
@@ -184,7 +243,7 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
               </div>
               <div className="cw-meta">
                 <span className={`cw-st ${cw.status}`} data-cw-st={cw.permutation_idx}>
-                  {pinned ? 'PINNED' : cw.status.toUpperCase()}
+                  {cw.status.toUpperCase()}
                 </span>
                 <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>
                   #{cw.permutation_idx}{cw.status === 'ready' || cw.status === 'pinned'
@@ -196,7 +255,8 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                     className={`cw-pin press${pinned ? ' on' : ''}`}
                     data-cw-pin={cw.permutation_idx}
                     aria-label={pinned ? 'Unpin' : 'Pin'}
-                    onClick={() => togglePin(cw.id)}
+                    disabled={pinM.isPending}
+                    onClick={() => pinM.mutate(cw)}
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
                       <path d="M12 17l-5.878 3.09 1.123-6.545L2.489 9.91l6.572-.955L12 3l2.939 5.955 6.572.955-4.756 4.635 1.123 6.545z" />
@@ -210,7 +270,7 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
       </div>
 
       {detail && (
-        <div className="cwlb" id="cw-lightbox" onClick={() => setDetail(null)}>
+        <div className="cwlb" id="cw-lightbox" onClick={() => { setDetailId(null); setExportAsk(false) }}>
           <div className="cwlb-body" onClick={e => e.stopPropagation()}>
             {detail.image_url && <img className="cwlb-img" src={detail.image_url} alt={`colorway ${detail.permutation_idx}`} />}
             <div className="cwlb-meta">
@@ -232,17 +292,58 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                 <br />
                 boundary lock {detail.lock_verified ? 'VERIFIED — untouched regions byte-identical' : detail.lock_verified === false ? 'FAILED' : '—'}
                 {detail.latency_ms != null && <><br />{(detail.latency_ms / 1000).toFixed(1)}s to paint</>}
+                {detail.status === 'pinned' && <><br />PINNED — protected from the 30-day expiry</>}
               </div>
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
                 <button
-                  className={`kbtn gc-open${pins.includes(detail.id) ? ' latched' : ''}`}
+                  className={`kbtn gc-open${detail.status === 'pinned' ? ' latched' : ''}`}
                   id="cwlb-pin"
-                  onClick={() => togglePin(detail.id)}
+                  disabled={pinM.isPending}
+                  onClick={() => pinM.mutate(detail)}
                 >
-                  {pins.includes(detail.id) ? '★ PINNED' : '☆ PIN'}
+                  {pinM.isPending ? '…' : detail.status === 'pinned' ? '★ PINNED' : '☆ PIN'}
                 </button>
-                <button className="kbtn gc-cancel" id="cwlb-close" onClick={() => setDetail(null)}>CLOSE</button>
+                <button
+                  className="kbtn gc-open"
+                  id="cwlb-export"
+                  disabled={exportM.isPending}
+                  onClick={() => setExportAsk(a => !a)}
+                >
+                  EXPORT 2K
+                </button>
+                <button className="kbtn gc-cancel" id="cwlb-close" onClick={() => { setDetailId(null); setExportAsk(false) }}>CLOSE</button>
               </div>
+              {(exportAsk || exportM.isPending) && (
+                <div className="export-ask" id="export-ask">
+                  {exportM.isPending ? (
+                    <div className="mono export-busy" id="export-busy" style={{ fontSize: 9.5, letterSpacing: '.08em' }}>
+                      {exportM.variables?.regenerate ? 'RE-PAINTING AT 2048 — ONE MODEL CALL, ~40S…' : 'UPSCALING TO 2048…'}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mono" style={{ fontSize: 8.5, letterSpacing: '.1em', color: 'var(--faint)' }}>
+                        2048PX PNG — PICK A PATH
+                      </div>
+                      <button
+                        className="export-opt press"
+                        id="export-upscale"
+                        onClick={() => exportM.mutate({ id: detail.id, regenerate: false })}
+                      >
+                        <span>Local upscale <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>LANCZOS FROM 1536</span></span>
+                        <b className="mono">FREE · $0</b>
+                      </button>
+                      <button
+                        className="export-opt press"
+                        id="export-regen"
+                        onClick={() => exportM.mutate({ id: detail.id, regenerate: true })}
+                      >
+                        <span>Re-paint at 2048 <span className="mono" style={{ fontSize: 8.5, color: 'var(--faint)' }}>ONE SEEDREAM CALL</span></span>
+                        <b className="mono">~${EXPORT_REGEN_DOLLARS}</b>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>

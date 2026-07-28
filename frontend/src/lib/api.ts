@@ -401,19 +401,57 @@ export interface StudySummary {
   completed_at: string | null
 }
 
-/* §9 defines POST /colorways/{id}/pin (copies the object to cw/pinned/) but
-   the backend has not built it yet (M8 gap, flagged in T3 evidence) — until
-   then pins persist client-side, keyed per study. */
-const pinKey = (studyId: string) => `atelier.pins.${studyId}`
-export const loadPins = (studyId: string): string[] => {
+// ── pins (M8, TDD §9): server-persisted — the object is COPIED to cw/pinned/
+//    so the 30-day lifecycle can never delete a pinned colorway. ────────────
+
+export interface PinOut {
+  id: string
+  status: 'ready' | 'pinned'
+  image_key: string
+  thumb_key: string | null
+  image_url: string
+  thumb_url: string | null
+}
+
+export const pinColorway = (colorwayId: string) =>
+  api<PinOut>(`/colorways/${colorwayId}/pin`, { method: 'POST' })
+export const unpinColorway = (colorwayId: string) =>
+  api<PinOut>(`/colorways/${colorwayId}/unpin`, { method: 'POST' })
+
+/* T3's localStorage stopgap (`atelier.pins.{studyId}`) is retired: read any
+   legacy ids ONCE so they can be synced to the API, then clear the key. */
+const legacyPinKey = (studyId: string) => `atelier.pins.${studyId}`
+export const readLegacyPins = (studyId: string): string[] => {
   try {
-    const raw = localStorage.getItem(pinKey(studyId))
+    const raw = localStorage.getItem(legacyPinKey(studyId))
     const arr: unknown = raw ? JSON.parse(raw) : []
     return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : []
   } catch { return [] }
 }
-export const savePins = (studyId: string, ids: string[]) =>
-  localStorage.setItem(pinKey(studyId), JSON.stringify(ids))
+export const clearLegacyPins = (studyId: string) =>
+  localStorage.removeItem(legacyPinKey(studyId))
+
+// ── 2K export (M8, PRD W11 + TDD §9): free local upscale by default, paid
+//    Seedream re-generation on request. Costs are shown BEFORE confirming. ──
+
+export interface ExportOut {
+  colorway_id: string
+  method: 'upscale' | 'regenerate'
+  width: number
+  height: number
+  key: string
+  download_url: string // presigned, content-disposition: attachment
+  cost_cents: number
+}
+
+export const exportColorway = (colorwayId: string, regenerate: boolean) =>
+  api<ExportOut>(`/colorways/${colorwayId}/export`, {
+    method: 'POST', body: JSON.stringify({ regenerate }),
+  })
+
+/** Seedream @2048 ≈ $0.135/edit (ledgered as 14¢) — dialog price tag only;
+ *  the authoritative charge comes back on the export response. */
+export const EXPORT_REGEN_DOLLARS = '0.135'
 
 /** Model price per trie call (backend COST_CENTS_PER_CALL) — ghost-card price
  *  tags only; every authoritative number still comes from the API. */
@@ -430,6 +468,12 @@ export const putSlots = (studyId: string, slots: SlotIn[]) =>
 export const estimateStudy = (studyId: string) =>
   api<Estimate>(`/studies/${studyId}/estimate`, { method: 'POST' })
 export const fetchPalette = (id: string) => api<Palette>(`/palettes/${id}`)
+
+/** GET /palettes/{id} also carries "similar" (nearest mean-Lab, same colour
+ *  count) — the palette-library detail view (M8, PRD W3). */
+export interface SimilarPalette { palette: Palette; distance: number }
+export interface PaletteDetail extends Palette { similar: SimilarPalette[] }
+export const fetchPaletteDetail = (id: string) => api<PaletteDetail>(`/palettes/${id}`)
 export const fetchPalettes = (facets: { count?: number; q?: string }) => {
   const p = new URLSearchParams()
   if (facets.count) p.set('count', String(facets.count))

@@ -55,3 +55,27 @@ def presign_get(key: str, expires: int = 3600) -> str:
         Params={"Bucket": get_settings().s3_bucket, "Key": key},
         ExpiresIn=expires,
     )
+
+
+def presign_download(key: str, filename: str, expires: int = 3600) -> str:
+    """Presigned GET that forces a browser download with a friendly filename
+    (2K exports — POST /colorways/{id}/export)."""
+    return get_s3().generate_presigned_url(
+        "get_object",
+        Params={
+            "Bucket": get_settings().s3_bucket,
+            "Key": key,
+            "ResponseContentDisposition": f'attachment; filename="{filename}"',
+        },
+        ExpiresIn=expires,
+    )
+
+
+def copy_object(src_key: str, dst_key: str) -> None:
+    """Server-side object copy within the bucket (pin: cw/ → cw/pinned/)."""
+    s = get_settings()
+    get_s3().copy_object(
+        Bucket=s.s3_bucket,
+        Key=dst_key,
+        CopySource={"Bucket": s.s3_bucket, "Key": src_key},
+    )

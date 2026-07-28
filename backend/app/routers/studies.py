@@ -50,6 +50,7 @@ from starlette.concurrency import run_in_threadpool
 from app.auth import Ctx, get_ctx
 from app.db import get_session
 from app.storage import get_s3, presign_get
+from app.wada import generation as G
 from app.wada import permutations as perm
 from app.wada.generation import MODEL_ID, PROMPT_VERSION
 
@@ -284,6 +285,12 @@ async def compute_plan(study_row, session: AsyncSession) -> dict:
         scores.append(perm.score(a, labs, areas))
         signatures.append(perm.signature(a, labs, areas))
 
+    # Anchored maths (M8 fix): the executor paints anchors as REAL chain
+    # steps interleaved by darkness, so trie-call counts must come from the
+    # FULL mappings (anchors included) — plan_study()'s free-space count
+    # undercounts anchored studies. darkness spans the whole palette.
+    darkness = {col.id: (col.lab_l, col.id) for col in colors}
+
     return {
         "slots": slots,
         "paint": paint,
@@ -298,6 +305,12 @@ async def compute_plan(study_row, session: AsyncSession) -> dict:
         "mappings": mappings,
         "scores": scores,
         "signatures": signatures,
+        "free_slots": free_slots,
+        "free_colors": free_colors,
+        "darkness": darkness,
+        # authoritative model-call count for the PLANNED sheet — matches the
+        # executor's chain walk exactly (anchor steps included)
+        "planned_calls": G.trie_calls(mappings, darkness),
     }
 
 
@@ -552,8 +565,26 @@ async def estimate_study(
     k, c, k_eff, c_eff, anchored = p["k"], p["c"], p["k_eff"], p["c_eff"], p["anchored"]
     est = perm.estimate(k_eff, c_eff, cap=policy["cap"])
 
+    # Anchored maths (M8 fix, flagged in M7-T2): the executor paints anchored
+    # slots as real chain steps, so every call/cost figure counts them. With
+    # zero anchors all of these reduce to the pure-engine numbers.
+    n_anch = len(anchored)
+    steps = est["steps_per_colorway"] + n_anch
+    naive_calls = est["perms"] * steps
+    if n_anch:
+        anchor_map = {s.idx: s.anchor_color_id for s in anchored}
+        free_slots, free_colors = p["free_slots"], p["free_colors"]
+        full_mappings = [
+            anchor_map
+            | {free_slots[pos].idx: free_colors[rank].id for pos, rank in enumerate(a)}
+            for a in perm.enumerate_assignments(k_eff, c_eff)
+        ]
+        trie_full = G.trie_calls(full_mappings, p["darkness"])
+    else:
+        trie_full = est["trie_calls"]
+
     planned = len(plan["selected"])
-    planned_calls = plan["trie_calls_selected"]
+    planned_calls = p["planned_calls"]  # full-mapping trie, anchors included
     est_cost = perm.cost_dollars(planned_calls)
     est_cost_cents = int(est_cost * 100)
 
@@ -584,8 +615,8 @@ async def estimate_study(
         (
             f"{perms} permutations exceeds the cap of {policy['cap']}. The "
             f"{policy['cap']} strongest and most varied will be generated "
-            f"(~${est['planned_max_cost']}). Merge slots or anchor a colour to "
-            f"explore the full space."
+            f"(~${perm.cost_dollars(min(perms, policy['cap']) * steps)}). "
+            f"Merge slots or anchor a colour to explore the full space."
         )
         if cap_exceeded
         else None
@@ -606,10 +637,10 @@ async def estimate_study(
     return EstimateOut(
         k=k, c=c, anchors=len(anchored), regime=regime,
         perm_total=perms, after_dedupe=plan["after_dedupe"], planned=planned,
-        steps_per_colorway=est["steps_per_colorway"],
-        naive_calls=est["naive_calls"], naive_cost=str(est["naive_cost"]),
-        trie_calls_full=est["trie_calls"], trie_cost_full=str(est["trie_cost"]),
-        saved_pct=est["saved_pct"],
+        steps_per_colorway=steps,
+        naive_calls=naive_calls, naive_cost=str(perm.cost_dollars(naive_calls)),
+        trie_calls_full=trie_full, trie_cost_full=str(perm.cost_dollars(trie_full)),
+        saved_pct=round((1 - trie_full / naive_calls) * 100),
         planned_calls=planned_calls, est_cost=str(est_cost), est_cost_cents=est_cost_cents,
         eager=len(plan["eager"]), eta_seconds=planned_calls * SECONDS_PER_CALL,
         cap=policy["cap"], cap_exceeded=cap_exceeded, cap_message=cap_message,

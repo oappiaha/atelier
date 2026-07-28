@@ -11,6 +11,7 @@ from app import auth
 from app.config import get_settings
 from app.db import engine
 from app.routers import (
+    colorways,
     designs,
     entries,
     generation,
@@ -89,6 +90,7 @@ app.include_router(palettes.router)
 app.include_router(regions.router)
 app.include_router(studies.router)
 app.include_router(generation.router)
+app.include_router(colorways.router)
 app.include_router(share.router)
 app.include_router(share.public_router)  # TDD §4: separate router, NO auth dependency
 

@@ -98,6 +98,22 @@ def chain_steps(
     ]
 
 
+def trie_calls(
+    mappings: list[dict[int, int]], darkness: dict[int, tuple[float, int]]
+) -> int:
+    """Distinct chain prefixes (§8.8 trie nodes = model calls) across FULL
+    permutation mappings — anchored slots included, exactly as the executor
+    walks them. This is the number the estimate must show for anchored
+    studies (M8 fix: plan_study() counts only the free-slot space, so it
+    undercounts by the anchor steps)."""
+    prefixes: set[tuple] = set()
+    for mapping in mappings:
+        steps = tuple(chain_steps(mapping, darkness))
+        for d in range(1, len(steps) + 1):
+            prefixes.add(steps[:d])
+    return len(prefixes)
+
+
 def cache_key(
     base_sha: str,
     chain: list[tuple[str, str]],  # [(color_hex, union_mask_sha), …] so far
