@@ -418,6 +418,28 @@ export const pinColorway = (colorwayId: string) =>
 export const unpinColorway = (colorwayId: string) =>
   api<PinOut>(`/colorways/${colorwayId}/unpin`, { method: 'POST' })
 
+// ── reject / hide (SHIP-1, §9 reject + additive unreject): rejected cards
+//    collapse into the contact sheet's hidden section. Nothing is deleted;
+//    a pinned colorway must be unpinned first (422 from the API). ──────────
+
+export interface RejectOut {
+  id: string
+  status: 'rejected' | 'ready' | 'planned'
+  image_url: string | null
+  thumb_url: string | null
+}
+
+export const rejectColorway = (colorwayId: string) =>
+  api<RejectOut>(`/colorways/${colorwayId}/reject`, { method: 'POST' })
+export const unrejectColorway = (colorwayId: string) =>
+  api<RejectOut>(`/colorways/${colorwayId}/unreject`, { method: 'POST' })
+
+/** SHIP-1 "duplicate & tweak": a frozen (generated) study forks into a fresh
+ *  draft on the same media — slots (groupings, locks, anchors), palette and
+ *  policy all carried; estimate recomputed on arrival. */
+export const duplicateStudy = (studyId: string) =>
+  api<Study>(`/studies/${studyId}/duplicate`, { method: 'POST' })
+
 /* T3's localStorage stopgap (`atelier.pins.{studyId}`) is retired: read any
    legacy ids ONCE so they can be synced to the API, then clear the key. */
 const legacyPinKey = (studyId: string) => `atelier.pins.${studyId}`
@@ -549,9 +571,17 @@ export interface UploadOpts {
   duration_ms?: number
 }
 
+/** Committed media + whether the bytes were ALREADY in the archive (the
+ *  upload-url dedupe matched by sha256). The flow still completes — dedupe
+ *  keeps the move-to-new-entry behaviour (Beezy 2026-07-18) — but the UI
+ *  must surface an "already in your archive" notice. */
+export interface UploadedMedia extends Media {
+  already_in_archive: boolean
+}
+
 /** Full capture pipeline for one file. Returns the committed media row.
  *  entry_id omitted → the capture lands in the Inbox. */
-export async function uploadMedia(file: Blob, opts: UploadOpts): Promise<Media> {
+export async function uploadMedia(file: Blob, opts: UploadOpts): Promise<UploadedMedia> {
   const contentType = file.type || 'image/jpeg'
   if (!UPLOADABLE.has(contentType)) {
     throw new ApiError(422, `Unsupported file type ${contentType || '(unknown)'}`)
@@ -575,7 +605,7 @@ export async function uploadMedia(file: Blob, opts: UploadOpts): Promise<Media> 
   }
 
   const dims = opts.kind === 'image' ? await imageDims(file) : null
-  return api<Media>('/media/commit', {
+  const media = await api<Media>('/media/commit', {
     method: 'POST',
     body: JSON.stringify({
       sha256,
@@ -590,4 +620,5 @@ export async function uploadMedia(file: Blob, opts: UploadOpts): Promise<Media> 
       entry_id: opts.entry_id ?? null,
     }),
   })
+  return { ...media, already_in_archive: u.duplicate_of !== null }
 }

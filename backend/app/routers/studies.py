@@ -754,6 +754,64 @@ async def delete_study(
     await session.commit()
 
 
+@router.post("/studies/{study_id}/duplicate", response_model=StudyOut, status_code=201)
+async def duplicate_study(
+    study_id: uuid.UUID,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> StudyOut:
+    """SHIP-1 "duplicate & tweak": a generated study is frozen (palette/slots/
+    policy are part of what was paid for), so iterating on it means a NEW
+    draft. This copies the study's whole config — base media, palette, policy
+    (anchors mirror included) and every slot row verbatim (region groupings,
+    locks, anchors, union masks — the §3 union keys are content-addressed and
+    deliberately shared: "two studies that group the same regions the same
+    way hit the same cache") — into a fresh draft on the same design.
+
+    Estimate columns start NULL (the §8.13.1 numbers are recomputed on the
+    first estimate, and must match the source's while the config is untouched
+    — pinned by test). model_id/prompt_version are stamped to the CURRENT
+    versions, not the source's: the new study will be generated with today's
+    template. Works on a study of any status; drafts too (a cheap fork)."""
+    src = await _study_or_404(study_id, ctx, session)
+    policy = src.policy if isinstance(src.policy, dict) else json.loads(src.policy)
+
+    row = (
+        await session.execute(
+            text(
+                """
+                INSERT INTO studies (workspace_id, design_id, base_media_id, palette_id,
+                                     policy, model_id, prompt_version)
+                VALUES (:ws, :design_id, :media_id, :palette_id,
+                        CAST(:policy AS jsonb), :model_id, :prompt_version)
+                RETURNING *
+                """
+            ),
+            {
+                "ws": str(ctx.workspace_id), "design_id": str(src.design_id),
+                "media_id": str(src.base_media_id), "palette_id": src.palette_id,
+                "policy": json.dumps(policy), "model_id": MODEL_ID,
+                "prompt_version": PROMPT_VERSION,
+            },
+        )
+    ).one()
+    await session.execute(
+        text(
+            """
+            INSERT INTO slots (study_id, idx, label, kind, region_ids,
+                               union_mask_key, union_sha256, area_fraction,
+                               anchor_color_id)
+            SELECT :new_id, idx, label, kind, region_ids,
+                   union_mask_key, union_sha256, area_fraction, anchor_color_id
+            FROM slots WHERE study_id = :src_id
+            """
+        ),
+        {"new_id": str(row.id), "src_id": str(src.id)},
+    )
+    await session.commit()
+    return await _study_out(row, session)
+
+
 @router.get("/designs/{design_id}/studies", response_model=list[StudySummary])
 async def list_design_studies(
     design_id: uuid.UUID,

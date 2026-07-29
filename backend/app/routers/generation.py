@@ -28,6 +28,7 @@ prompt_version is stamped to the current template version at that moment.
 """
 
 import json
+import logging
 import uuid
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -45,6 +46,115 @@ from app.wada import generation as G
 from app.wada import permutations as perm
 
 router = APIRouter(tags=["generation"])
+
+logger = logging.getLogger(__name__)
+
+# ── stuck-run watchdog (SHIP-1 hardening) ────────────────────────────────────
+#
+# Mechanism choice: an ON-READ sweep in GET /studies/{id}/colorways, not a
+# celery-beat process. The contact sheet polls exactly this endpoint every
+# ~3s for as long as anything shows 'generating', so a stuck study self-heals
+# the moment anyone is looking at it — which is the only moment stuckness
+# matters (the 409 "already in progress" gate and the endless GENERATING…
+# banner are the user-visible symptoms). Beat would add a 4th long-running
+# process to dev + prod compose to fix a screen nobody is watching.
+#
+# "No active task" signal: the trie executor refreshes a short-TTL redis
+# heartbeat per chain node (gen:active:{study_id}, EX 180 vs ~40s/node). A
+# live heartbeat vetoes the sweep entirely — timestamps alone cannot tell a
+# long legitimate full-sheet run from a dead worker.
+
+STUDY_STUCK_MINUTES = 30  # generating with no heartbeat this long → partial
+COLORWAY_STUCK_MINUTES = 15  # a single colorway paints in ~2min; 15 is dead
+
+WATCHDOG_CW_ERROR = "watchdog: generation task lost mid-paint"
+WATCHDOG_STUDY_ERROR = (
+    f"watchdog: no generation activity for {STUDY_STUCK_MINUTES}min — "
+    "run marked partial, everything generated so far is kept"
+)
+
+
+async def _heartbeat_alive(study_id) -> bool:
+    from app.auth import get_redis
+
+    try:
+        return bool(await get_redis().exists(G.heartbeat_key(study_id)))
+    except Exception:  # noqa: BLE001 — redis down: no worker is alive either
+        logger.warning("watchdog: redis unreachable, assuming no active task")
+        return False
+
+
+async def _watchdog_sweep(study, session: AsyncSession) -> bool:
+    """Mark obviously-dead generation state; returns True if anything changed
+    (the caller re-reads the study). Ready/pinned/rejected rows are never
+    touched — partial means partial, results are kept."""
+    n_generating = (
+        await session.execute(
+            text(
+                "SELECT COUNT(*) FROM colorways "
+                "WHERE study_id = :id AND status = 'generating'"
+            ),
+            {"id": str(study.id)},
+        )
+    ).scalar_one()
+    if study.status != "generating" and not n_generating:
+        return False
+    if await _heartbeat_alive(study.id):
+        return False
+
+    changed = False
+    # rule 1: a colorway mid-paint for >15min with no live task is dead
+    stuck_cws = (
+        await session.execute(
+            text(
+                "UPDATE colorways SET status = 'failed', error = :err "
+                "WHERE study_id = :id AND status = 'generating' "
+                "AND COALESCE(generation_started_at, created_at) "
+                "    < now() - make_interval(mins => :mins) "
+                "RETURNING id"
+            ),
+            {"err": WATCHDOG_CW_ERROR, "id": str(study.id),
+             "mins": COLORWAY_STUCK_MINUTES},
+        )
+    ).all()
+    changed = bool(stuck_cws)
+
+    # rule 2: the study itself — >30min of 'generating' with no heartbeat
+    if study.status == "generating":
+        study_stuck = (
+            await session.execute(
+                text(
+                    "SELECT COALESCE(generation_started_at, created_at) "
+                    "       < now() - make_interval(mins => :mins) "
+                    "FROM studies WHERE id = :id"
+                ),
+                {"mins": STUDY_STUCK_MINUTES, "id": str(study.id)},
+            )
+        ).scalar_one()
+        if study_stuck:
+            # no task exists, so whatever is still mid-paint is dead too
+            await session.execute(
+                text(
+                    "UPDATE colorways SET status = 'failed', error = :err "
+                    "WHERE study_id = :id AND status = 'generating'"
+                ),
+                {"err": WATCHDOG_CW_ERROR, "id": str(study.id)},
+            )
+            await session.execute(
+                text(
+                    "UPDATE studies SET status = 'partial', error = :err "
+                    "WHERE id = :id"
+                ),
+                {"err": WATCHDOG_STUDY_ERROR, "id": str(study.id)},
+            )
+            changed = True
+
+    if changed:
+        await session.commit()
+        logger.warning(
+            "watchdog swept study %s (%d stuck colorways)", study.id, len(stuck_cws)
+        )
+    return changed
 
 
 # ── models ───────────────────────────────────────────────────────────────────
@@ -309,7 +419,10 @@ async def generate(
 
     if todo:
         await session.execute(
-            text("UPDATE studies SET status = 'generating', error = NULL WHERE id = :id"),
+            text(
+                "UPDATE studies SET status = 'generating', error = NULL, "
+                "generation_started_at = now() WHERE id = :id"
+            ),
             {"id": str(study.id)},
         )
     await session.commit()
@@ -373,7 +486,10 @@ async def generate_one(
     await _budget_gate(session, str(ctx.workspace_id), study.actual_cost_cents, estimated)
 
     await session.execute(
-        text("UPDATE studies SET status = 'generating', error = NULL WHERE id = :id"),
+        text(
+            "UPDATE studies SET status = 'generating', error = NULL, "
+            "generation_started_at = now() WHERE id = :id"
+        ),
         {"id": str(study.id)},
     )
     await session.commit()
@@ -487,6 +603,8 @@ async def list_colorways(
     session: AsyncSession = Depends(get_session),
 ) -> ColorwaysOut:
     study = await _study_or_404(study_id, ctx, session)
+    if await _watchdog_sweep(study, session):
+        study = await _study_or_404(study_id, ctx, session)
     rows = await _study_colorways(session, study.id)
 
     slots = (

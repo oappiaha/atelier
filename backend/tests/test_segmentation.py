@@ -290,3 +290,85 @@ async def test_segment_without_key_skips_cleanly(authed, upload_media, monkeypat
     media = await upload_media(data=_photo_png())
     monkeypatch.setattr(get_settings(), "gemini_api_key", None)
     assert segment_worker.segment_media(media["id"]) == "skipped:no-gemini-key"
+
+
+# ── SHIP-1 hardening: JSON-parse retry (re-request on malformed output) ──────
+
+_META = {
+    "model": "gemini-3.5-flash", "latency_s": 0.0,
+    "input_tokens": 1, "output_tokens": 1, "finish_reason": "STOP",
+}
+
+
+async def test_segment_json_parse_retry_recovers(authed, upload_media, monkeypatch):
+    """A malformed first response (the prod transient) is re-requested — the
+    second, valid response completes the pipeline. ≤2 retries, each a real
+    model call."""
+    from app.config import get_settings
+    from app.wada import segmentation
+    from app.workers import segment as segment_worker
+
+    media = await upload_media(data=_photo_png())
+    # attempt 1: truncated mid-array (json.JSONDecodeError); attempt 2: valid
+    responses = ['[{"box_2d": [100, 100, 900', RAW]
+    calls = {"n": 0}
+
+    def fake_call_gemini(image, api_key):
+        calls["n"] += 1
+        return responses[min(calls["n"] - 1, len(responses) - 1)], _META
+
+    monkeypatch.setattr(segmentation, "call_gemini", fake_call_gemini)
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-key")
+
+    assert (await authed.post(f"/media/{media['id']}/segment")).status_code == 202
+    result = segment_worker.segment_media(media["id"])
+    assert result == "segmented:1", result
+    assert calls["n"] == 2  # exactly one retry
+
+    r = await authed.get(f"/media/{media['id']}/regions")
+    assert r.status_code == 200 and len(r.json()) == 1
+
+
+async def test_segment_json_parse_gives_up_after_two_retries(
+    authed, upload_media, monkeypatch
+):
+    """Persistently malformed output fails LOUDLY after 3 attempts (1 + 2
+    retries): no regions persisted, in-flight lock released so a later run
+    can succeed."""
+    import os
+
+    import redis as redis_sync
+
+    from app.config import get_settings
+    from app.wada import segmentation
+    from app.workers import segment as segment_worker
+
+    media = await upload_media(data=_photo_png())
+    calls = {"n": 0}
+
+    def fake_call_gemini(image, api_key):
+        calls["n"] += 1
+        return "no json array here at all", _META  # ValueError path
+
+    monkeypatch.setattr(segmentation, "call_gemini", fake_call_gemini)
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-key")
+
+    assert (await authed.post(f"/media/{media['id']}/segment")).status_code == 202
+    with pytest.raises(ValueError, match="after 3 attempts"):
+        segment_worker.segment_media(media["id"])
+    assert calls["n"] == 3
+
+    # nothing persisted, and the in-flight lock is gone (retryable)
+    r = await authed.get(f"/media/{media['id']}/regions")
+    assert r.status_code == 200 and r.json() == []
+    rds = redis_sync.from_url(os.environ["REDIS_URL"])
+    assert not rds.exists(segment_worker.seg_lock_key(media["id"]))
+    rds.close()
+
+    # the transient clears -> the same media segments fine on the next run
+    def fixed_call_gemini(image, api_key):
+        calls["n"] += 1
+        return RAW, _META
+
+    monkeypatch.setattr(segmentation, "call_gemini", fixed_call_gemini)
+    assert segment_worker.segment_media(media["id"]) == "segmented:1"

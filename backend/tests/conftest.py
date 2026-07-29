@@ -32,6 +32,10 @@ os.environ["REDIS_URL"] = "redis://localhost:6380/1"
 # env vars override the .env file — blank means cutout tasks skip unless a
 # test monkeypatches the setting and mocks the HTTP boundary
 os.environ["PHOTOROOM_API_KEY"] = ""
+# .env flipped to PHOTOROOM_SANDBOX=false when billing went live (2026-07-29)
+# — the suite pins the config DEFAULT (sandbox) so test behaviour never
+# tracks prod-mode toggles in .env (test_cutout asserts the sandbox_ prefix)
+os.environ["PHOTOROOM_SANDBOX"] = "true"
 
 import uuid  # noqa: E402
 

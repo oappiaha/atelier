@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api, uploadMedia, type Entry, type Media, type Phase, PHASE_LABELS } from '../lib/api'
+import { api, uploadMedia, type Entry, type Phase, type UploadedMedia, PHASE_LABELS } from '../lib/api'
 import { toast, useCapture } from '../lib/store'
 
 type CapMode = 'menu' | 'photo' | 'mood' | 'note' | 'voice' | 'inspo'
@@ -60,9 +60,14 @@ export default function CaptureSheet() {
     }
   }
 
-  const done = (label: string) => {
+  /** dupCount > 0 → the sha256 dedupe matched: the capture still lands (the
+   *  move-to-new-entry behaviour stands — Beezy 2026-07-18), but the user is
+   *  told the bytes were already in the archive. */
+  const done = (label: string, dupCount = 0) => {
     invalidate()
-    toast(`${label} → ${destName}`)
+    toast(dupCount > 0
+      ? `Already in your archive — ${label.toLowerCase()} moved → ${destName}`
+      : `${label} → ${destName}`)
     closeCapture()
   }
 
@@ -81,7 +86,7 @@ export default function CaptureSheet() {
     if (!files.length) return
     setBusy(true)
     try {
-      const medias: Media[] = []
+      const medias: UploadedMedia[] = []
       for (const f of files) medias.push(await uploadMedia(f, { kind: 'image', ...extra }))
       if (dest === 'design' && designCtx) {
         await api<Entry>('/entries', {
@@ -94,7 +99,7 @@ export default function CaptureSheet() {
           }),
         })
       }
-      done(label)
+      done(label, medias.filter(m => m.already_in_archive).length)
     } catch (e) {
       fail(e)
     } finally {
@@ -158,7 +163,7 @@ export default function CaptureSheet() {
           body: JSON.stringify({ design_id: designCtx.id, phase: 'voice', media_ids: [media.id] }),
         })
       }
-      done('Voice note')
+      done('Voice note', media.already_in_archive ? 1 : 0)
     } catch (e) {
       fail(e)
     } finally {

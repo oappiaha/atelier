@@ -28,14 +28,18 @@ jobs:
       redis:
         image: redis:7
         ports: ["6380:6379"]
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: atelier
-          MINIO_ROOT_PASSWORD: atelier-local
-        ports: ["9000:9000"]
     steps:
       - uses: actions/checkout@v4
+      # services: can't pass a container command, and minio/minio needs
+      # `server /data` — so MinIO runs via docker run instead.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=atelier -e MINIO_ROOT_PASSWORD=atelier-local \
+            minio/minio server /data
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && break; sleep 1;
+          done
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"

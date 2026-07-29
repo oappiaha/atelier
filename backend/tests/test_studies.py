@@ -575,3 +575,86 @@ async def test_put_slots_resets_stale_estimate(authed, study_setup):
     s = r.json()
     assert s["perm_total"] is None and s["perm_planned"] is None
     assert s["est_cost_cents"] is None
+
+
+# ── SHIP-1: duplicate & tweak (POST /studies/{id}/duplicate) ─────────────────
+
+async def test_duplicate_copies_slots_palette_policy(authed, study_setup):
+    """The new draft carries the whole config: palette, policy (anchors
+    mirror included), and every slot verbatim — region groupings, locks,
+    anchors, the content-addressed union masks."""
+    setup = study_setup
+    src = await _create_study(
+        authed, setup, palette_id="c241", policy={"twin_threshold": 20.0}
+    )
+    anchor_color = (await authed.get("/palettes/c241")).json()["color_ids"][0]
+    slots = [_slot(setup, [label], label) for label in ("body", "panel", "strap")]
+    slots[0]["anchor_color_id"] = anchor_color
+    slots.append(_slot(setup, ["buckle"], "hardware", kind="lock"))
+    r = await authed.put(f"/studies/{src['id']}/slots", json=slots)
+    assert r.status_code == 200, r.text
+    src = r.json()
+
+    r = await authed.post(f"/studies/{src['id']}/duplicate")
+    assert r.status_code == 201, r.text
+    dup = r.json()
+    assert dup["id"] != src["id"]
+    assert dup["status"] == "draft"
+    assert dup["design_id"] == src["design_id"]
+    assert dup["base_media_id"] == src["base_media_id"]
+    assert dup["palette_id"] == "c241"
+    assert dup["policy"] == src["policy"]  # incl. twin_threshold + anchors mirror
+    assert dup["k"] == src["k"] == 3
+    # estimate columns start clean — the numbers are recomputed
+    assert dup["perm_total"] is None and dup["est_cost_cents"] is None
+
+    strip = ["idx", "label", "kind", "region_ids", "union_mask_key",
+             "union_sha256", "area_fraction", "anchor_color_id"]
+    assert [{k: s[k] for k in strip} for s in dup["slots"]] == [
+        {k: s[k] for k in strip} for s in src["slots"]
+    ]
+
+
+async def test_duplicate_estimate_parity_and_independence(authed, study_setup):
+    """Same config in, same §8.13.1 numbers out — the duplicate's estimate
+    must equal the source's exactly. And the fork is independent: editing the
+    duplicate's slots never touches the source (a frozen study's slots are
+    part of what was paid for)."""
+    setup = study_setup
+    src = await _three_slot_study(authed, setup, palette_id="c121")
+    est_src = (await authed.post(f"/studies/{src['id']}/estimate")).json()
+
+    # freeze the source the way generation would, then duplicate
+    dsn = os.environ["DATABASE_URL"].replace("+asyncpg", "")
+    with psycopg.connect(dsn) as conn:
+        conn.execute(
+            "UPDATE studies SET status = 'complete' WHERE id = %s", (src["id"],)
+        )
+        conn.commit()
+    r = await authed.post(f"/studies/{src['id']}/duplicate")
+    assert r.status_code == 201, r.text
+    dup = r.json()
+
+    est_dup = (await authed.post(f"/studies/{dup['id']}/estimate")).json()
+    assert est_dup == est_src  # every number: perms, calls, cost, eta, copy
+
+    # the duplicate is a real draft — tweakable — and the source is untouched
+    r = await authed.put(
+        f"/studies/{dup['id']}/slots",
+        json=[_slot(setup, ["body", "panel"], "merged"), _slot(setup, ["strap"], "strap")],
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["k"] == 2
+    src_after = (await authed.get(f"/studies/{src['id']}")).json()
+    assert src_after["k"] == 3 and src_after["status"] == "complete"
+
+    # a frozen source still 409s direct edits (the duplicate is the only path)
+    r = await authed.put(
+        f"/studies/{src['id']}/slots", json=[_slot(setup, ["body"], "body")]
+    )
+    assert r.status_code == 409
+
+
+async def test_duplicate_negatives(authed, client):
+    assert (await client.post(f"/studies/{uuid.uuid4()}/duplicate")).status_code == 401
+    assert (await authed.post(f"/studies/{uuid.uuid4()}/duplicate")).status_code == 404

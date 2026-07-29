@@ -12,6 +12,20 @@ POST /colorways/{id}/unpin    Reverse (additive — §9 defines pin + reject but
                               object back to the working key (the original may
                               have been lifecycle-evicted), deletes the pinned
                               copy, status → ready. Idempotent on ready.
+POST /colorways/{id}/reject   §9's reject: hide a colorway from the working
+                              sheet (status → rejected). Only planned/ready
+                              can be rejected; a PINNED colorway is 422 —
+                              pin and reject are contradictory intents, so
+                              the user must unpin first (SHIP-1 decision).
+                              Nothing is deleted: the image/thumb objects and
+                              spend records stay (a rejected colorway is
+                              still a spend record). Idempotent on rejected.
+POST /colorways/{id}/unreject Reverse (additive, same deviation logic as
+                              unpin: §9 defines reject but no way back, and
+                              a hide the user cannot undo is a trap). Status
+                              returns to ready when an image exists, else to
+                              planned (a rejected ghost). Idempotent on
+                              ready/planned.
 POST /colorways/{id}/export   2K PNG (PRD W11 + Beezy 2026-07-18 decision):
                               default = FREE local Pillow upscale of the
                               stored colorway to a 2048 long edge (LANCZOS,
@@ -182,6 +196,74 @@ async def unpin_colorway(
     row = await _set_keys(session, cw.id, "ready", work_key, work_thumb)
     await session.commit()
     return _pin_out(row)
+
+
+class RejectOut(BaseModel):
+    """Reject/unreject echo — image keys are optional (a planned ghost has
+    none), unlike PinOut whose contract requires a stored object."""
+
+    id: uuid.UUID
+    status: str
+    image_url: str | None
+    thumb_url: str | None
+
+
+def _reject_out(row) -> RejectOut:
+    return RejectOut(
+        id=row.id, status=row.status,
+        image_url=presign_get(row.image_key) if row.image_key else None,
+        thumb_url=presign_get(row.thumb_key) if row.thumb_key else None,
+    )
+
+
+@router.post("/colorways/{colorway_id}/reject", response_model=RejectOut)
+async def reject_colorway(
+    colorway_id: uuid.UUID,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> RejectOut:
+    cw = await _colorway_or_404(colorway_id, ctx, session)
+    if cw.status == "rejected":
+        return _reject_out(cw)  # idempotent
+    if cw.status == "pinned":
+        raise HTTPException(
+            422, "a pinned colorway cannot be rejected — unpin it first"
+        )
+    if cw.status not in ("planned", "ready"):
+        raise HTTPException(
+            409, f"only a planned or ready colorway can be rejected (this one is {cw.status})"
+        )
+    row = (
+        await session.execute(
+            text("UPDATE colorways SET status = 'rejected' WHERE id = :id RETURNING *"),
+            {"id": str(cw.id)},
+        )
+    ).one()
+    await session.commit()
+    return _reject_out(row)
+
+
+@router.post("/colorways/{colorway_id}/unreject", response_model=RejectOut)
+async def unreject_colorway(
+    colorway_id: uuid.UUID,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> RejectOut:
+    cw = await _colorway_or_404(colorway_id, ctx, session)
+    if cw.status in ("ready", "planned"):
+        return _reject_out(cw)  # idempotent
+    if cw.status != "rejected":
+        raise HTTPException(409, f"colorway is not rejected (it is {cw.status})")
+    # a generated reject returns to ready; a rejected ghost returns to planned
+    restored = "ready" if cw.image_key else "planned"
+    row = (
+        await session.execute(
+            text("UPDATE colorways SET status = :st WHERE id = :id RETURNING *"),
+            {"st": restored, "id": str(cw.id)},
+        )
+    ).one()
+    await session.commit()
+    return _reject_out(row)
 
 
 def _upscale_export(image_key: str, export_key: str) -> tuple[int, int]:

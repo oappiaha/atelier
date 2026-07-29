@@ -41,6 +41,18 @@ DILATE_PX = 2  # M5-T1 handoff, confirmed by the T1 gate
 FEATHER_PX = 3  # §8.10: 2–4px; below 2 aliases, above 4 bleeds
 RESOLUTION = 1536  # working long edge (TDD §8.1 PREPARE)
 
+# SHIP-1 watchdog heartbeat: the executor refreshes this redis key per chain
+# node; the GET /colorways on-read sweep treats its absence as "no active
+# task". TTL is generous vs the ~40s/node cadence but far under the 15min
+# colorway threshold. Defined here because worker and router both need the
+# exact key format and neither may import the other.
+HEARTBEAT_TTL = 180
+
+
+def heartbeat_key(study_id) -> str:
+    return f"gen:active:{study_id}"
+
+
 # guard metric parameters (T1 metrics.py conventions)
 E_CORE = 4  # erosion for core-region ΔE stats
 E_BAND = 6  # boundary band width for ghost fraction

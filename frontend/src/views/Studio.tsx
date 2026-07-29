@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  api, apiErrorDetail, estimateStudy, fetchPalette, fetchPalettes,
+  api, apiErrorDetail, duplicateStudy, estimateStudy, fetchPalette, fetchPalettes,
   fetchRegions, fetchStudy, generateStudy, patchStudy, putSlots,
   rememberStudy, MAX_PAINT_SLOTS,
   type Design as DesignT, type Estimate, type Media, type Palette,
@@ -262,6 +262,20 @@ export default function Studio() {
     },
   })
 
+  // ── duplicate & tweak (SHIP-1): a frozen study forks into a fresh draft —
+  //    same base photo, slots (groupings/locks/anchors) and palette carried,
+  //    estimate recomputed on arrival. ─────────────────────────────────────────
+  const duplicateM = useMutation({
+    mutationFn: () => duplicateStudy(studyId!),
+    onSuccess: ns => {
+      qc.setQueryData(['study', ns.id], ns)
+      qc.invalidateQueries({ queryKey: ['studies', designId] })
+      toast('New draft — slots & palette carried over')
+      navigate(`/d/${designId}/study/${ns.id}`)
+    },
+    onError: e => toast(apiErrorDetail(e, 'Could not duplicate the study')),
+  })
+
   // ── derived ────────────────────────────────────────────────────────────────
   const palette = paletteQ.data ?? null
   const slotColor = (i: number) =>
@@ -306,8 +320,22 @@ export default function Studio() {
             </div>
             <div className="syne" style={{ fontSize: 28, fontWeight: 800 }}>Wada Studio</div>
           </div>
-          <div className="rise mono" id="study-status" style={{ fontSize: 9, letterSpacing: '.12em', color: 'var(--fog)', animationDelay: '.06s' }}>
-            {study.data ? `${study.data.status.toUpperCase()} · #${study.data.palette_id} · ${palette?.name ?? '…'}` : 'LOADING…'}
+          <div className="rise" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, animationDelay: '.06s' }}>
+            <div className="mono" id="study-status" style={{ fontSize: 9, letterSpacing: '.12em', color: 'var(--fog)' }}>
+              {study.data ? `${study.data.status.toUpperCase()} · #${study.data.palette_id} · ${palette?.name ?? '…'}` : 'LOADING…'}
+            </div>
+            {frozen && (
+              <button
+                className="kbtn gc-open press"
+                id="study-duplicate"
+                disabled={duplicateM.isPending}
+                style={{ width: 'auto', padding: '0 12px' }}
+                title="Fork this study into a fresh draft — slots, locks, anchors and palette carried over"
+                onClick={() => duplicateM.mutate()}
+              >
+                {duplicateM.isPending ? '…' : '⧉ NEW STUDY FROM THIS'}
+              </button>
+            )}
           </div>
         </div>
 

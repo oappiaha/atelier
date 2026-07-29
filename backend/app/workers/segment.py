@@ -39,6 +39,12 @@ logger = logging.getLogger(__name__)
 
 SEG_LOCK_TTL = 180  # seconds; covers model latency + refinement comfortably
 
+# SHIP-1 hardening: Gemini occasionally emits malformed/truncated JSON (a
+# transient — observed once on prod, deploy/redeploy-m7m8-evidence.md). A
+# parse failure is re-requested up to this many times; each retry is a real,
+# separately-ledgered model call.
+SEG_PARSE_RETRIES = 2
+
 
 def seg_lock_key(media_id: str) -> str:
     return f"seg:inflight:{media_id}"
@@ -117,14 +123,31 @@ def _segment(media_id: str, settings) -> str:
     logger.info("media=%s segmenting from %s (alpha=%s)", media_id, source_key,
                 alpha is not None)
 
-    raw_text, meta = segmentation.call_gemini(img, settings.gemini_api_key)
-    logger.info(
-        "MODEL-CALL gemini segmentation media=%s model=%s latency=%.1fs "
-        "tokens_in=%s tokens_out=%s finish=%s",
-        media_id, meta["model"], meta["latency_s"],
-        meta["input_tokens"], meta["output_tokens"], meta["finish_reason"],
-    )
-    regions = segmentation.parse_regions(raw_text)
+    regions = None
+    last_err: ValueError | None = None
+    for attempt in range(1 + SEG_PARSE_RETRIES):
+        raw_text, meta = segmentation.call_gemini(img, settings.gemini_api_key)
+        logger.info(
+            "MODEL-CALL gemini segmentation media=%s model=%s latency=%.1fs "
+            "tokens_in=%s tokens_out=%s finish=%s attempt=%d",
+            media_id, meta["model"], meta["latency_s"],
+            meta["input_tokens"], meta["output_tokens"], meta["finish_reason"],
+            attempt + 1,
+        )
+        try:  # json.JSONDecodeError is a ValueError subclass
+            regions = segmentation.parse_regions(raw_text)
+            break
+        except ValueError as e:
+            last_err = e
+            logger.warning(
+                "media=%s segmentation JSON parse failed (attempt %d/%d): %s",
+                media_id, attempt + 1, 1 + SEG_PARSE_RETRIES, e,
+            )
+    if regions is None:
+        raise ValueError(
+            f"segmentation response unparseable after {1 + SEG_PARSE_RETRIES} "
+            f"attempts: {last_err}"
+        )
     kept, dropped = segmentation.apply_drop_rules(regions)
     logger.info(
         "media=%s regions: %d returned, %d kept, %d dropped (conf<%.2f or area<%.3f)",

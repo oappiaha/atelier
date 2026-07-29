@@ -451,6 +451,19 @@ textarea.field{min-height:84px;resize:none;}
   justify-content:center;color:var(--faint);border:1px solid transparent;flex-shrink:0;}
 .cw-pin:hover{border-color:var(--stroke-strong);}
 .cw-pin.on{color:var(--accent);}
+/* reject/hide (SHIP-1): the ✕ sits beside the pin; rejected cards live in a
+   collapsed "N HIDDEN" shelf under the grid */
+.cw-hide{margin-left:0;}
+.cw-hide:hover{color:#B3261E;border-color:rgba(179,38,30,.3);}
+.cw-st.rejected{color:var(--faint);border-style:dashed;}
+.cw-hidden{margin-top:14px;}
+.cw-hidden-toggle{display:flex;align-items:center;gap:7px;font-size:9px;letter-spacing:.12em;
+  color:var(--fog);border:1px dashed var(--stroke-strong);border-radius:999px;padding:7px 13px;}
+.cw-grid-hidden{margin-top:12px;}
+.cw-card.rejected{opacity:.72;border-style:dashed;}
+.cw-card.rejected .cw-img{filter:grayscale(.55);}
+.cw-unreject{margin-left:auto;width:auto;padding:0 10px;font-family:'DM Mono';font-size:8px;
+  letter-spacing:.08em;}
 /* colorway lightbox / detail */
 .cwlb{position:fixed;inset:0;z-index:400;background:rgba(13,17,23,.78);
   display:grid;place-items:center;padding:14px;animation:fadeIn .25s ease both;}

@@ -64,6 +64,31 @@ class NodeFailed(Exception):
     """A node that must fail its colorway without retry (§8.12)."""
 
 
+def _heartbeat(study_id: str) -> None:
+    """Refresh the watchdog's is-a-task-alive signal (SHIP-1): the on-read
+    sweep in GET /colorways only declares a run dead when this key is gone.
+    Best-effort — a redis blip must never kill a paid run."""
+    try:
+        import redis as redis_sync
+
+        r = redis_sync.from_url(get_settings().redis_url)
+        r.set(G.heartbeat_key(study_id), "1", ex=G.HEARTBEAT_TTL)
+        r.close()
+    except Exception:  # noqa: BLE001
+        logger.warning("could not refresh generation heartbeat for %s", study_id)
+
+
+def _clear_heartbeat(study_id: str) -> None:
+    try:
+        import redis as redis_sync
+
+        r = redis_sync.from_url(get_settings().redis_url)
+        r.delete(G.heartbeat_key(study_id))
+        r.close()
+    except Exception:  # noqa: BLE001
+        logger.warning("could not clear generation heartbeat for %s", study_id)
+
+
 def _sync_dsn() -> str:
     return get_settings().database_url.replace("+asyncpg", "")
 
@@ -148,6 +173,14 @@ def blocked_tier(conn, workspace_id, study_actual_cents: int, next_cents: int) -
 
 @celery_app.task(name="wada.generate")
 def generate_study(study_id: str, colorway_ids: list[str] | None = None) -> str:
+    _heartbeat(study_id)  # the watchdog must see a live task from second one
+    try:
+        return _generate_study(study_id, colorway_ids)
+    finally:
+        _clear_heartbeat(study_id)
+
+
+def _generate_study(study_id: str, colorway_ids: list[str] | None = None) -> str:
     settings = get_settings()
     s3 = get_s3()
     bucket = settings.s3_bucket
@@ -277,7 +310,8 @@ def generate_study(study_id: str, colorway_ids: list[str] | None = None) -> str:
             steps = G.chain_steps(mapping, darkness)
 
             conn.execute(
-                "UPDATE colorways SET status = 'generating', error = NULL WHERE id = %s",
+                "UPDATE colorways SET status = 'generating', error = NULL, "
+                "generation_started_at = now() WHERE id = %s",
                 (cw_id,),
             )
             conn.commit()
@@ -290,6 +324,7 @@ def generate_study(study_id: str, colorway_ids: list[str] | None = None) -> str:
             t0 = time.time()
 
             for color_id, slot_idxs in steps:
+                _heartbeat(study_id)  # watchdog: still alive, one key per study
                 # cancellation is checked between nodes (§8.12)
                 (st,) = conn.execute(
                     "SELECT status FROM studies WHERE id = %s", (study_id,)

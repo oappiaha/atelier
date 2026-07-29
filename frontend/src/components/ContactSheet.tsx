@@ -11,7 +11,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   apiErrorDetail, clearLegacyPins, exportColorway, fetchColorways,
-  generateOne, generateStudy, pinColorway, readLegacyPins, unpinColorway,
+  generateOne, generateStudy, pinColorway, readLegacyPins,
+  rejectColorway, unpinColorway, unrejectColorway,
   CENTS_PER_CALL, EXPORT_REGEN_DOLLARS,
   type Colorway, type ColorwaysOut,
 } from '../lib/api'
@@ -51,6 +52,7 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
   const [confirmRemaining, setConfirmRemaining] = useState(false)
   const [detailId, setDetailId] = useState<string | null>(null)
   const [exportAsk, setExportAsk] = useState(false)
+  const [showHidden, setShowHidden] = useState(false)
 
   const refetchSoon = () => {
     qc.invalidateQueries({ queryKey: ['colorways', studyId] })
@@ -96,6 +98,23 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
     })
   }, [d, studyId, qc])
 
+  // ── reject / hide (SHIP-1): rejected cards collapse into the hidden
+  //    section; unreject brings them back (ready, or planned for a ghost).
+  //    A pinned colorway 422s server-side — unpin is the way back. ──────────
+  const rejectM = useMutation({
+    mutationFn: (cw: Colorway) =>
+      cw.status === 'rejected' ? unrejectColorway(cw.id) : rejectColorway(cw.id),
+    onSuccess: out => {
+      toast(out.status === 'rejected' ? 'Hidden — moved to the shelf below' : 'Restored to the sheet')
+      if (out.status === 'rejected' && detailId === out.id) {
+        setDetailId(null)
+        setExportAsk(false)
+      }
+      refetchSoon()
+    },
+    onError: e => toast(apiErrorDetail(e, 'Could not update the colorway')),
+  })
+
   const genRemaining = useMutation({
     mutationFn: () => generateStudy(studyId, { all: true }),
     onSuccess: out => {
@@ -133,6 +152,9 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
   })
 
   const cws = useMemo(() => d?.colorways ?? [], [d])
+  // rejected colorways leave the working grid and collapse into "N hidden"
+  const visible = useMemo(() => cws.filter(c => c.status !== 'rejected'), [cws])
+  const hidden = useMemo(() => cws.filter(c => c.status === 'rejected'), [cws])
   const remaining = useMemo(
     () => cws.filter(c => c.status === 'planned' || c.status === 'failed'),
     [cws],
@@ -186,7 +208,7 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
       </div>
 
       <div className="cw-grid" id="cw-grid">
-        {cws.map(cw => {
+        {visible.map(cw => {
           const pinned = cw.status === 'pinned'
           const img = cw.thumb_url ?? cw.image_url
           const isGhost = cw.status === 'planned'
@@ -263,11 +285,78 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                     </svg>
                   </button>
                 )}
+                {cw.status === 'ready' && (
+                  <button
+                    className="cw-pin cw-hide press"
+                    data-cw-hide={cw.permutation_idx}
+                    aria-label="Hide (reject)"
+                    title="Hide this colorway"
+                    disabled={rejectM.isPending}
+                    onClick={() => rejectM.mutate(cw)}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M6 6l12 12M18 6L6 18" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
           )
         })}
       </div>
+
+      {/* ── hidden shelf: rejected colorways, collapsed to one row ── */}
+      {hidden.length > 0 && (
+        <div className="cw-hidden" id="cw-hidden">
+          <button
+            className="cw-hidden-toggle press mono"
+            id="cw-hidden-toggle"
+            onClick={() => setShowHidden(h => !h)}
+          >
+            <span>{hidden.length} HIDDEN</span>
+            <svg
+              width="10" height="10" viewBox="0 0 10 10" fill="none"
+              style={{ transform: showHidden ? 'rotate(180deg)' : 'none', transition: 'transform .2s ease' }}
+            >
+              <path d="M2.5 4l2.5 2.5L7.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {showHidden && (
+            <div className="cw-grid cw-grid-hidden" id="cw-hidden-grid">
+              {hidden.map(cw => {
+                const img = cw.thumb_url ?? cw.image_url
+                return (
+                  <div key={cw.id} className="cw-card rejected" data-cw={cw.permutation_idx} data-cw-status="rejected">
+                    <div className="cw-imgwrap">
+                      {img ? (
+                        <img className="cw-img" src={img} alt={`colorway ${cw.permutation_idx}`} loading="lazy" />
+                      ) : (
+                        <span className="cw-holding mono">NEVER GENERATED</span>
+                      )}
+                    </div>
+                    <div className="cw-fp" data-cw-fp={cw.permutation_idx}>
+                      {cw.mapping.map(chip => (
+                        <span key={chip.slot_idx} className="cw-chip" style={{ background: chip.hex }} title={`${chip.slot_label} = ${chip.name}`} />
+                      ))}
+                    </div>
+                    <div className="cw-meta">
+                      <span className="cw-st rejected" data-cw-st={cw.permutation_idx}>REJECTED</span>
+                      <button
+                        className="kbtn gc-open cw-unreject press"
+                        data-cw-unreject={cw.permutation_idx}
+                        disabled={rejectM.isPending}
+                        onClick={() => rejectM.mutate(cw)}
+                      >
+                        {rejectM.isPending ? '…' : 'UN-REJECT'}
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {detail && (
         <div className="cwlb" id="cw-lightbox" onClick={() => { setDetailId(null); setExportAsk(false) }}>
@@ -311,6 +400,16 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                 >
                   EXPORT 2K
                 </button>
+                {detail.status === 'ready' && (
+                  <button
+                    className="kbtn gc-cancel"
+                    id="cwlb-hide"
+                    disabled={rejectM.isPending}
+                    onClick={() => rejectM.mutate(detail)}
+                  >
+                    {rejectM.isPending ? '…' : '✕ HIDE'}
+                  </button>
+                )}
                 <button className="kbtn gc-cancel" id="cwlb-close" onClick={() => { setDetailId(null); setExportAsk(false) }}>CLOSE</button>
               </div>
               {(exportAsk || exportM.isPending) && (

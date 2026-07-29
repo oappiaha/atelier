@@ -301,3 +301,97 @@ async def test_unanchored_estimate_numbers_unchanged(authed, gen_setup):  # noqa
     assert est["naive_calls"] == 18 and est["trie_calls_full"] == 15
     assert est["planned_calls"] == 15 and est["est_cost"] == "1.01"
     assert est["saved_pct"] == 17
+
+
+# ── SHIP-1: reject / unreject (hide from the working sheet) ──────────────────
+
+async def test_reject_ready_and_unreject_restores(authed, gen_setup, fal):  # noqa: F811
+    study, cws = await _ready_colorways(authed, gen_setup, fal)
+    cw = next(c for c in cws if c["status"] == "ready")
+
+    r = await authed.post(f"/colorways/{cw['id']}/reject")
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["status"] == "rejected"
+    assert out["image_url"]  # nothing deleted — still a spend record
+
+    # idempotent
+    r = await authed.post(f"/colorways/{cw['id']}/reject")
+    assert r.status_code == 200 and r.json()["status"] == "rejected"
+
+    # authoritative read-backs: DB + the contact-sheet projection
+    with _db() as conn:
+        (st,) = conn.execute(
+            "SELECT status FROM colorways WHERE id = %s", (cw["id"],)
+        ).fetchone()
+    assert st == "rejected"
+    sheet = (await authed.get(f"/studies/{study['id']}/colorways")).json()
+    row = next(c for c in sheet["colorways"] if c["id"] == cw["id"])
+    assert row["status"] == "rejected"
+    assert sheet["ready"] == 1  # eager-2 minus the reject
+
+    # unreject: a generated reject returns to ready (image intact)
+    r = await authed.post(f"/colorways/{cw['id']}/unreject")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ready" and r.json()["image_url"]
+    # idempotent
+    r = await authed.post(f"/colorways/{cw['id']}/unreject")
+    assert r.status_code == 200 and r.json()["status"] == "ready"
+    sheet = (await authed.get(f"/studies/{study['id']}/colorways")).json()
+    assert sheet["ready"] == 2
+
+
+async def test_reject_planned_ghost_and_back(authed, gen_setup, fal):  # noqa: F811
+    """A deferred (never generated) permutation can be hidden too; unreject
+    returns it to planned, not ready — there is no image."""
+    _, cws = await _ready_colorways(authed, gen_setup, fal)
+    ghost = next(c for c in cws if c["status"] == "planned")
+
+    r = await authed.post(f"/colorways/{ghost['id']}/reject")
+    assert r.status_code == 200 and r.json()["status"] == "rejected"
+    assert r.json()["image_url"] is None
+
+    r = await authed.post(f"/colorways/{ghost['id']}/unreject")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "planned"
+
+
+async def test_reject_pinned_is_422_until_unpinned(authed, gen_setup, fal):  # noqa: F811
+    """Pin and reject are contradictory intents: the pin must be taken back
+    first (mirrors the §3 protection — a reject must never silently drop the
+    lifecycle-exempt copy)."""
+    _, cws = await _ready_colorways(authed, gen_setup, fal)
+    cw = next(c for c in cws if c["status"] == "ready")
+    assert (await authed.post(f"/colorways/{cw['id']}/pin")).status_code == 200
+
+    r = await authed.post(f"/colorways/{cw['id']}/reject")
+    assert r.status_code == 422
+    assert "unpin" in r.json()["detail"]
+
+    assert (await authed.post(f"/colorways/{cw['id']}/unpin")).status_code == 200
+    assert (await authed.post(f"/colorways/{cw['id']}/reject")).status_code == 200
+
+
+async def test_reject_unreject_negatives(authed, client, gen_setup, fal):  # noqa: F811
+    _, cws = await _ready_colorways(authed, gen_setup, fal)
+    cw = next(c for c in cws if c["status"] == "ready")
+
+    # auth + 404
+    assert (await client.post(f"/colorways/{cw['id']}/reject")).status_code == 401
+    assert (await client.post(f"/colorways/{cw['id']}/unreject")).status_code == 401
+    assert (await authed.post(f"/colorways/{uuid.uuid4()}/reject")).status_code == 404
+    assert (await authed.post(f"/colorways/{uuid.uuid4()}/unreject")).status_code == 404
+
+    # only planned/ready can be rejected; only rejected can be unrejected
+    with _db() as conn:
+        conn.execute(
+            "UPDATE colorways SET status = 'failed' WHERE id = %s", (cw["id"],)
+        )
+        conn.commit()
+    assert (await authed.post(f"/colorways/{cw['id']}/reject")).status_code == 409
+    assert (await authed.post(f"/colorways/{cw['id']}/unreject")).status_code == 409
+    with _db() as conn:  # restore for the fixture teardown
+        conn.execute(
+            "UPDATE colorways SET status = 'ready' WHERE id = %s", (cw["id"],)
+        )
+        conn.commit()
