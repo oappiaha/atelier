@@ -173,6 +173,15 @@ JSON-parse retry hardening, §9 unpin/SSE formalization).
 - **PhotoRoom pipeline ON HOLD** per Beezy; API key received and stored in
   `backend/.env` (gitignored — key lives only there, never in git).
 
+## CI (live 2026-07-29)
+
+GitHub `oappiaha/atelier`, Actions on every push/PR: backend = ruff + full
+211-test suite against real PG/Redis/MinIO service containers (MinIO via
+docker-run step — bitnami images are gone from Docker Hub; conftest's dev-
+preservation guard auto-skips when no dev archive exists); frontend = oxlint
++ tsc/vite build. Ruff pinned 0.16.0 (unpinned CI drifted rules vs local);
+FastAPI Depends idiom exempted via bugbear extend-immutable-calls.
+
 ## How to resume
 
 ```bash
