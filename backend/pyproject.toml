@@ -23,6 +23,9 @@ dependencies = [
     "numpy>=2",
     "opencv-python-headless>=4.10",
     "google-genai>=2",
+    # M7 generation — generate.py imports fal_client inside the task; it was
+    # only ad-hoc installed in the dev venv (same trap as numpy/cv2/genai).
+    "fal-client>=0.5",
 ]
 
 [project.optional-dependencies]

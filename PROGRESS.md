@@ -4,7 +4,13 @@
 > `atelier_light_v3 (3).html` (the visual spec). Update this file at the end of
 > every working session.
 
-**Last updated:** 2026-07-16 · session 2 (M2 + M3 + long-term needs)
+**Last updated:** 2026-07-29 · **V1.5 BUILD-COMPLETE AND LIVE** — M0–M8 all
+done+verified; https://wada.garden runs the full product (archive, share
+links, Wada Studio end-to-end: segment→compose→generate→pin→export, proven
+on prod at $0.34/eager-pair). Remaining: ship checklist + ops run (share-
+target phone test, dedupe notice, design pass, Resend, key rotation, Sentry,
+CI, R2 lifecycle rules) + Wada follow-ups (stuck-study watchdog, Gemini
+JSON-parse retry hardening, §9 unpin/SSE formalization).
 
 ---
 
