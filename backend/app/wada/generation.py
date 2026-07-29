@@ -344,7 +344,7 @@ def alloc_cents(n_calls_before: int, per_call: Decimal = COST_CENTS_PER_CALL) ->
     7¢/call would drift to 105¢ and never reconcile."""
 
     def cum(n: int) -> int:
-        return int((per_call * n).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        return int((per_call * n).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
     return cum(n_calls_before + 1) - cum(n_calls_before)
 

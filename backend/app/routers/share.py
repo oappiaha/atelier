@@ -99,7 +99,7 @@ async def mint(
     target_id = body.project_id or body.design_id
     name_row = (
         await session.execute(
-            text(f"SELECT name FROM {table} WHERE workspace_id = :ws AND id = :id"),  # noqa: S608
+            text(f"SELECT name FROM {table} WHERE workspace_id = :ws AND id = :id"),
             {"ws": str(ctx.workspace_id), "id": str(target_id)},
         )
     ).one_or_none()

@@ -135,7 +135,7 @@ def call_gemini(image: Image.Image, api_key: str) -> tuple[str, dict]:
 
 def parse_regions(raw_text: str) -> list[RawRegion]:
     """Parse the model's JSON (possibly fenced) into RawRegions."""
-    m = re.search(r"\[.*\]", raw_text, re.S)
+    m = re.search(r"\[.*\]", raw_text, re.DOTALL)
     if m is None:
         raise ValueError(f"no JSON array in segmentation response: {raw_text[:200]!r}")
     out: list[RawRegion] = []

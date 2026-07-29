@@ -32,7 +32,7 @@ dependencies = [
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.24",
-    "ruff>=0.6",
+    "ruff==0.16.0",  # pinned: CI installs fresh — unpinned ruff drifted rules vs local
 ]
 
 [build-system]
@@ -45,6 +45,10 @@ packages = ["app"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection idiom: Depends()/Query() in defaults is the API.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

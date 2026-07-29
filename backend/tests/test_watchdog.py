@@ -35,7 +35,7 @@ def _backdate(table: str, row_id: str, minutes: int) -> None:
     assert table in ("studies", "colorways")
     with _db() as conn:
         conn.execute(
-            f"UPDATE {table} SET generation_started_at = "  # noqa: S608
+            f"UPDATE {table} SET generation_started_at = "
             "now() - make_interval(mins => %s) WHERE id = %s",
             (minutes, row_id),
         )
@@ -46,7 +46,7 @@ def _set_status(table: str, row_id: str, status: str) -> None:
     assert table in ("studies", "colorways")
     with _db() as conn:
         conn.execute(
-            f"UPDATE {table} SET status = %s WHERE id = %s",  # noqa: S608
+            f"UPDATE {table} SET status = %s WHERE id = %s",
             (status, row_id),
         )
         conn.commit()

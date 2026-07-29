@@ -202,7 +202,7 @@ def test_cost_parameterised_by_cost_cents_per_call():
     """§8.9: the adapter declares its price; the maths must follow it."""
     assert perm.cost_dollars(15, Decimal("6.75")) == Decimal("1.01")
     assert perm.cost_dollars(15, Decimal("13.50")) == Decimal("2.03")  # 2x price
-    assert perm.cost_dollars(15, Decimal("2")) == Decimal("0.30")
+    assert perm.cost_dollars(15, Decimal(2)) == Decimal("0.30")
     est = perm.estimate(3, 3, cost_cents_per_call=Decimal("6.75"))
     assert est["perms"] == 6
     assert est["trie_calls"] == 15

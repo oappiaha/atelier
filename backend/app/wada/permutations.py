@@ -28,7 +28,7 @@ price every table in the TDD and PRD is quoted at.
 
 import math
 from decimal import ROUND_HALF_UP, Decimal
-from functools import lru_cache
+from functools import cache
 from itertools import permutations as _permutations
 from itertools import product as _product
 
@@ -44,7 +44,7 @@ Chain = tuple[Step, ...]
 
 # ── counting (§8.4) ──────────────────────────────────────────────────────────
 
-@lru_cache(maxsize=None)
+@cache
 def stirling2(n: int, k: int) -> int:
     """Stirling numbers of the second kind."""
     if n == k:

@@ -41,7 +41,7 @@ def _synthetic():
         ang = 2 * np.pi * k / 10
         # ray-march to the truth boundary
         r = 0.0
-        for rr in range(0, 300):
+        for rr in range(300):
             x, y = int(cx + rr * np.cos(ang)), int(cy + rr * np.sin(ang))
             if not (0 <= x < W and 0 <= y < H) or not truth[y, x]:
                 r = rr
@@ -82,8 +82,8 @@ def test_refine_falls_back_to_coarse_when_result_diverges():
     or returns something still anchored to the polygon."""
     from app.wada import refine
 
-    img, truth, coarse = _synthetic()
-    refined, info = refine.refine_mask(img, coarse)
+    img, _truth, coarse = _synthetic()
+    refined, _info = refine.refine_mask(img, coarse)
     # whatever came back overlaps the polygon substantially — never a wild mask
     assert refine.iou(refined, coarse) >= refine.IOU_FALLBACK_MIN
 

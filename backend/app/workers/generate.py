@@ -129,7 +129,7 @@ def call_seedream(
                 },
                 with_logs=False,
             )
-            data = urllib.request.urlopen(  # noqa: S310 — fal returns https URLs
+            data = urllib.request.urlopen(
                 res["images"][0]["url"], timeout=120
             ).read()
             img = Image.open(io.BytesIO(data)).convert("RGB")

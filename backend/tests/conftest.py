@@ -37,15 +37,15 @@ os.environ["PHOTOROOM_API_KEY"] = ""
 # tracks prod-mode toggles in .env (test_cutout asserts the sandbox_ prefix)
 os.environ["PHOTOROOM_SANDBOX"] = "true"
 
-import uuid  # noqa: E402
+import uuid
 
-import httpx  # noqa: E402
-import psycopg  # noqa: E402
-import pytest  # noqa: E402
-import pytest_asyncio  # noqa: E402
-from httpx import ASGITransport, AsyncClient  # noqa: E402
+import httpx
+import psycopg
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 
-from tests.util import make_png, sha256  # noqa: E402
+from tests.util import make_png, sha256
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 ADMIN_DSN = "postgresql://atelier:atelier@localhost:5433/postgres"
@@ -60,7 +60,7 @@ def _dev_snapshot() -> dict:
     with psycopg.connect(DEV_DSN) as conn:
         for table in ("projects", "designs", "entries", "media"):
             snap[f"db:{table}"] = conn.execute(
-                f"SELECT COUNT(*) FROM {table}"  # noqa: S608 — fixed identifiers
+                f"SELECT COUNT(*) FROM {table}"
             ).fetchone()[0]
     from app.storage import get_s3
 

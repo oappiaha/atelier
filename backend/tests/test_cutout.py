@@ -20,10 +20,9 @@ import psycopg
 import pytest
 from PIL import Image
 
-from tests.util import WS, sha256
-
 from app.config import get_settings
 from app.workers.cutout import cutout_key_for, ensure_cutout, generate_cutout
+from tests.util import WS, sha256
 
 pytestmark = pytest.mark.usefixtures("isolated_infra")
 

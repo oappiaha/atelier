@@ -283,7 +283,7 @@ def _estimate_cents_for(target_mappings: list[dict[int, int]], darkness: dict) -
     """Distinct chain prefixes across the target colorways × 6.75¢ — the §8.8
     node count if nothing were cached (G.trie_calls: anchors included)."""
     total = G.COST_CENTS_PER_CALL * G.trie_calls(target_mappings, darkness)
-    return int(total.quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    return int(total.quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 async def _darkness_for(session: AsyncSession, color_ids: list[int]) -> dict:

@@ -249,7 +249,7 @@ async def test_put_slots_composes_union_masks(authed, study_setup):
     assert [(s["idx"], s["label"], s["kind"]) for s in out["slots"]] == [
         (0, "body", "paint"), (1, "trim", "paint"), (2, "buckle", "lock"),
     ]
-    body_slot, trim_slot, lock_slot = out["slots"]
+    body_slot, trim_slot, _lock_slot = out["slots"]
     assert body_slot["area_fraction"] == pytest.approx(0.30, abs=1e-6)
     assert trim_slot["area_fraction"] == pytest.approx(0.16, abs=1e-6)
 

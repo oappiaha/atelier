@@ -35,7 +35,7 @@ async def lifespan(app: FastAPI):
         from app.storage import ensure_bucket
 
         ensure_bucket()
-    except Exception as e:  # storage being down shouldn't kill the API
+    except Exception as e:  # noqa: BLE001 — storage down shouldn't kill the API
         print(f"storage unavailable at startup: {e}", flush=True)
     yield
     await engine.dispose()

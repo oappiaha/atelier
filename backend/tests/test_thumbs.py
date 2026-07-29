@@ -12,9 +12,8 @@ import uuid
 import httpx
 from PIL import Image
 
-from tests.util import WS, sha256
-
 from app.workers.thumbs import THUMB_WIDTHS, generate_thumbs, thumb_key_for
+from tests.util import WS, sha256
 
 
 def make_real_png(w: int = 1000, h: int = 750) -> bytes:

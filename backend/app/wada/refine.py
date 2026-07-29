@@ -173,7 +173,7 @@ def _gate_by_edge_evidence(
     diff = refined ^ coarse
     h, w = diff.shape
     tile = 48
-    n, labels = cv2.connectedComponents(diff.astype(np.uint8), connectivity=8)
+    _n, labels = cv2.connectedComponents(diff.astype(np.uint8), connectivity=8)
     for ty in range(0, h, tile):
         for tx in range(0, w, tile):
             sl = (slice(ty, min(ty + tile, h)), slice(tx, min(tx + tile, w)))
