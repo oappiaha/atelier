@@ -55,9 +55,17 @@ DEV_BUCKET = "atelier"
 
 # ── dev-resource preservation snapshot ───────────────────────────────────────
 
-def _dev_snapshot() -> dict:
+def _dev_snapshot() -> dict | None:
+    """Snapshot of the local dev archive, or None when there is no dev archive
+    to protect (CI: the `atelier` db exists but was never migrated, and the
+    dev bucket doesn't exist — the guard has nothing to guard)."""
     snap: dict = {}
     with psycopg.connect(DEV_DSN) as conn:
+        migrated = conn.execute(
+            "SELECT to_regclass('public.projects') IS NOT NULL"
+        ).fetchone()[0]
+        if not migrated:
+            return None
         for table in ("projects", "designs", "entries", "media"):
             snap[f"db:{table}"] = conn.execute(
                 f"SELECT COUNT(*) FROM {table}"
@@ -65,6 +73,9 @@ def _dev_snapshot() -> dict:
     from app.storage import get_s3
 
     s3 = get_s3()
+    if DEV_BUCKET not in {b["Name"] for b in s3.list_buckets().get("Buckets", [])}:
+        snap["bucket:objects"] = None
+        return snap
     count = 0
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=DEV_BUCKET):
@@ -107,6 +118,8 @@ def isolated_infra():
 
     before = _dev_snapshot()
     yield
+    if before is None:  # no dev archive exists (CI) — nothing to preserve
+        return
     after = _dev_snapshot()
     assert after == before, (
         f"PRESERVATION VIOLATION: dev DB/bucket changed during the suite: {before} -> {after}"
