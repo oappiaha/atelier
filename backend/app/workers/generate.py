@@ -25,6 +25,10 @@ Working base: the study's base media CUTOUT (the Wada contract since the
 2026-07-26 PhotoRoom decision) — ensure_cutout() before the first node,
 falling back to the original when no cutout can be produced. The working
 frame must equal the region-mask frame; a mismatch fails the run loudly.
+When a cutout exists, its alpha also drives the residual-coverage pass
+(app.wada.coverage): slot masks are grown until their union covers the whole
+product silhouette, so no sliver of the ORIGINAL base colour survives the
+composite; grown masks are re-uploaded content-addressed under their own sha.
 
 Documented deviations:
 - Anchored slots are painted as real chain steps (shared by every colorway).
@@ -49,8 +53,8 @@ from PIL import Image
 
 from app.config import get_settings
 from app.storage import get_s3
+from app.wada import coverage, segmentation
 from app.wada import generation as G
-from app.wada import segmentation
 from app.workers import cutout
 from app.workers.celery_app import celery_app
 
@@ -205,6 +209,16 @@ def _generate_study(study_id: str, colorway_ids: list[str] | None = None) -> str
             return "skipped:no-slots"
         slot_by_idx = {r[0]: {"label": r[1], "region_ids": r[2],
                               "mask_key": r[3], "mask_sha": r[4]} for r in slots}
+        # lock slots are never painted, but their masks must take part in the
+        # residual-coverage assignment below: product pixels hugging a locked
+        # slot belong to the lock (stay base), not to a recolour slot
+        lock_keys = [
+            r[0] for r in conn.execute(
+                "SELECT union_mask_key FROM slots "
+                "WHERE study_id = %s AND kind = 'lock' ORDER BY idx",
+                (study_id,),
+            ).fetchall()
+        ]
 
         params: list = [study_id]
         id_filter = ""
@@ -256,7 +270,7 @@ def _generate_study(study_id: str, colorway_ids: list[str] | None = None) -> str
     cutout_key = cutout.ensure_cutout(str(media_id))
     source_key = cutout_key or r2_key
     source = s3.get_object(Bucket=bucket, Key=source_key)["Body"].read()
-    base_img, _alpha = segmentation.working_image_and_alpha(source)
+    base_img, alpha = segmentation.working_image_and_alpha(source)
     base_png = G.png_bytes(base_img)
     base_sha = hashlib.sha256(base_png).hexdigest()
     frame = base_img.size
@@ -274,6 +288,51 @@ def _generate_study(study_id: str, colorway_ids: list[str] | None = None) -> str
                 "masks and base must share the 1536 frame"
             )
         slot_mask[idx] = arr
+
+    # ── residual coverage (the base-colour leak fix): the cutout's alpha is
+    # the ground-truth product silhouette. Coarse polygons + per-region
+    # refinement leave product slivers outside EVERY slot union, and the
+    # §8.10 composite would keep the ORIGINAL base colour there. Assign each
+    # uncovered silhouette component to the nearest slot — locks included, so
+    # a sliver hugging a locked slot stays unpainted rather than being
+    # swallowed by a recolour slot. Deterministic pure CV, so replays grow
+    # identical masks; each grown mask re-enters the content-addressed union
+    # key space under the sha of its ACTUAL bytes, keeping gen_nodes cache
+    # keys true to the pixels painted (§8.8). No cutout (alpha is None, the
+    # original-image fallback) → no silhouette ground truth → unchanged masks.
+    if alpha is not None and slot_mask:
+        cover_in: dict[tuple[int, int], np.ndarray] = {
+            (0, idx): m for idx, m in slot_mask.items()
+        }
+        for j, lk in enumerate(lock_keys):
+            png = s3.get_object(Bucket=bucket, Key=lk)["Body"].read()
+            arr = np.asarray(Image.open(io.BytesIO(png)).convert("L")) > 127
+            if arr.shape != (frame[1], frame[0]):
+                raise RuntimeError(
+                    f"lock mask frame {arr.shape} disagrees with working frame {frame} — "
+                    "masks and base must share the 1536 frame"
+                )
+            cover_in[(1, j)] = arr
+        covered, cov = coverage.cover_silhouette(alpha, cover_in)
+        for idx in slot_mask:
+            if cov.added_px[(0, idx)] == 0:
+                continue
+            grown = covered[(0, idx)]
+            png = G.mask_png_bytes(grown)
+            sha = hashlib.sha256(png).hexdigest()
+            s3.put_object(
+                Bucket=bucket, Key=f"mask/{ws}/{media_sha}/union/{sha}.png",
+                Body=png, ContentType="image/png",
+            )
+            slot_mask[idx] = grown
+            slot_by_idx[idx]["mask_sha"] = sha
+        if cov.residual_px:
+            logger.info(
+                "study=%s residual coverage: %d px in %d components assigned "
+                "(%.4f of silhouette)",
+                study_id, cov.residual_px, cov.n_components,
+                cov.residual_px / max(int(alpha.sum()), 1),
+            )
 
     # distinct step masks: single-slot steps reuse the slot union sha; multi-
     # slot steps (a colour shared by slots) union on the fly and upload to the

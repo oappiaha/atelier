@@ -4,12 +4,16 @@
 > `atelier_light_v3 (3).html` (the visual spec). Update this file at the end of
 > every working session.
 
-**Last updated:** 2026-07-29 · **V1.5 BUILD-COMPLETE AND LIVE** — M0–M8 all
+**Last updated:** 2026-07-30 · **V1.5 BUILD-COMPLETE AND LIVE** — M0–M8 all
 done+verified; https://wada.garden runs the full product (archive, share
 links, Wada Studio end-to-end: segment→compose→generate→pin→export, proven
-on prod at $0.34/eager-pair). Remaining: ship checklist + ops run (share-
-target phone test, dedupe notice, design pass, Resend, key rotation, Sentry,
-CI, R2 lifecycle rules) + Wada follow-ups (stuck-study watchdog, Gemini
+on prod at $0.34/eager-pair). 2026-07-30: SHIP-1 redeployed to prod (an
+interrupted session had synced code but never rebuilt containers or shipped
+the new bundle — duplicate-study + reject/hide are now actually live);
+PhotoRoom re-enabled with real billing (Basic $0.02/img, sandbox off, dev +
+prod); residual-coverage mask fix (base-colour leak) shipped, suite 220.
+Remaining: ship checklist + ops run (share-target phone test, design pass,
+Resend, key rotation, Sentry, R2 lifecycle rules) + Wada follow-ups (Gemini
 JSON-parse retry hardening, §9 unpin/SSE formalization).
 
 ---
@@ -25,7 +29,7 @@ JSON-parse retry hardening, §9 unpin/SSE formalization).
 | M4 | PWA + inbox triage UI | **UI DONE + verified** — Home unsorted-count row + triage sheet (46/46 browser checks + orchestrator live re-drive). Remaining for M4 close: share-target E2E (needs deployed HTTPS PWA), "already in archive" dedupe notice, design-system pass. |
 | M5 | Segmentation + Slot Composer | **DONE + verified 2026-07-27** — segmentation (Gemini 3.5 polygon → GrabCut refinement, seam PASS 49%→4%/42%→13%), PhotoRoom cutout stage (mask spill 7.3%→0.0000 on busy backgrounds), studies/slots/estimate API (engine-exact $1.01/6-perm numbers), and the **Slot Composer UI** at /d/:id/study/:id — region overlays (mask-mode:luminance), tap-to-paint slots (K 1..8), 348-palette picker, live estimate with verbatim PRD pedagogy incl. amber surjective + cap copy, disabled M7 generate key. Fixtures: Duffle study 015fadcf (3 slots, $1.01), Bellypack 2dffd193 (c241, K4). Suite 164. |
 | M6 | Permutation engine + cache | **Effectively done inside M5** — the §8.3–8.8 engine + trie math + estimate endpoint (suite-pinned to TDD tables). Formal close pending M7 wiring. |
-| M7 | Generation + contact sheet | **DONE + verified 2026-07-28** — chain-drift gate PASSED (compositing contains model drift to byte-identical; §8.4 economics intact), trie executor live (per-step composite + lock_verified guards, §8.11 budget ledger, eager-2/ghosts/resume, §9 PATCH/DELETE/list), contact sheet UI (generate key, live polling, ghost cards, confirm-with-cost). Duffle fixture: 6 clean colorways (PhotoRoom disabled per Beezy — watermark issue; re-enable with billing), all nodes lock-verified, closed at estimate exactly. |
+| M7 | Generation + contact sheet | **DONE + verified 2026-07-28** — chain-drift gate PASSED (compositing contains model drift to byte-identical; §8.4 economics intact), trie executor live (per-step composite + lock_verified guards, §8.11 budget ledger, eager-2/ghosts/resume, §9 PATCH/DELETE/list), contact sheet UI (generate key, live polling, ghost cards, confirm-with-cost). Duffle fixture: 6 clean colorways (PhotoRoom disabled per Beezy at the time — watermark issue; RE-ENABLED 2026-07-29 with real billing, sandbox off, dev + prod), all nodes lock-verified, closed at estimate exactly. |
 | M8 | Pin + export + palette lib | **DONE + verified 2026-07-28** — POST pin/unpin (physical copy to lifecycle-exempt cw/pinned/, localStorage migration), 2K export (free LANCZOS upscale default / $0.135 Seedream regen option, cost-confirmed, ledgered as kind=export), anchored-estimate fix (estimate==executor call count, named test), PaletteDetail sheet (swatch anatomy, similar, use-in-study). Shortlist skipped — no schema/§9 basis. Suite **198**. **V1.5 BUILD-COMPLETE.** Remaining: redeploy to wada.garden, ship checklist (share-target phone test, dedupe notice, design pass), ops (Resend, key rotation, Sentry, CI, R2 lifecycle rules). |
 
 ## What exists and is verified working
@@ -172,6 +176,23 @@ JSON-parse retry hardening, §9 unpin/SSE formalization).
   prefers Fly's managed deploys. Decide at deploy (M1 "real URL" DoD).
 - **PhotoRoom pipeline ON HOLD** per Beezy; API key received and stored in
   `backend/.env` (gitignored — key lives only there, never in git).
+
+## Residual-coverage mask fix (2026-07-30)
+
+Base-colour leak fix: coarse Gemini polygons + per-region GrabCut leave
+product slivers outside every slot union, so composites kept the ORIGINAL
+colour there (green corners on recolored bags). `app/wada/coverage.py`
+(`cover_silhouette`) uses the PhotoRoom cutout alpha as the ground-truth
+silhouette, assigns each uncovered component to the adjacent/nearest mask —
+locks participate as equal citizens (a sliver hugging a locked slot stays
+base, never swallowed by a recolour slot). Wired at composite time in
+`workers/generate.py` (NOT at union-build in studies.py — slot unions stay a
+pure function of region grouping and stay shared across studies); grown masks
+re-upload content-addressed under the sha of their actual bytes, so gen_nodes
+cache keys stay true to painted pixels and replays remain 100% cache hits
+(pinned by test). No cutout/alpha → pass skipped (old behavior, leak
+included). Large residual fraction is logged as a segmentation-quality
+signal. Suite 220 (9 new in `tests/test_coverage.py`).
 
 ## CI (live 2026-07-29)
 
