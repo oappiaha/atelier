@@ -8,6 +8,7 @@
 // migrate to the API once on load. 2K export lives in the lightbox: free
 // local upscale or paid Seedream re-paint, costs shown before confirming.
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   apiErrorDetail, clearLegacyPins, exportColorway, fetchColorways,
@@ -163,6 +164,19 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
   const remainingMax = remaining.reduce((s, c) => s + ghostCents(c), 0)
   // the lightbox always renders the LIVE row (pin/export update underneath it)
   const detail = detailId ? cws.find(c => c.id === detailId) ?? null : null
+
+  // Esc closes the lightbox (backdrop click already does)
+  useEffect(() => {
+    if (!detailId) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDetailId(null)
+        setExportAsk(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [detailId])
 
   if (sheetQ.isError) {
     return (
@@ -358,9 +372,23 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
         </div>
       )}
 
-      {detail && (
+      {/* portaled to <body>: any transformed ancestor (e.g. a .rise entry
+          animation) would otherwise become the containing block for this
+          fixed overlay and pin it inside the sheet instead of the viewport */}
+      {detail && createPortal(
         <div className="cwlb" id="cw-lightbox" onClick={() => { setDetailId(null); setExportAsk(false) }}>
           <div className="cwlb-body" onClick={e => e.stopPropagation()}>
+            <button
+              className="cwlb-close press"
+              id="cwlb-close"
+              aria-label="Close"
+              title="Close"
+              onClick={() => { setDetailId(null); setExportAsk(false) }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
             {detail.image_url && <img className="cwlb-img" src={detail.image_url} alt={`colorway ${detail.permutation_idx}`} />}
             <div className="cwlb-meta">
               <div className="cw-fp" style={{ padding: 0 }}>
@@ -402,15 +430,20 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                 </button>
                 {detail.status === 'ready' && (
                   <button
-                    className="kbtn gc-cancel"
+                    className="iconbtn press"
                     id="cwlb-hide"
+                    aria-label="Hide colorway"
+                    title="Hide from the sheet (reversible)"
                     disabled={rejectM.isPending}
                     onClick={() => rejectM.mutate(detail)}
                   >
-                    {rejectM.isPending ? '…' : '✕ HIDE'}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.4 10.4 0 0 1 12 19c-7 0-10.5-7-10.5-7a19.8 19.8 0 0 1 4.62-5.56M9.9 5.24A9.3 9.3 0 0 1 12 5c7 0 10.5 7 10.5 7a19.9 19.9 0 0 1-2.85 3.95" />
+                      <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+                      <path d="M2 2l20 20" />
+                    </svg>
                   </button>
                 )}
-                <button className="kbtn gc-cancel" id="cwlb-close" onClick={() => { setDetailId(null); setExportAsk(false) }}>CLOSE</button>
               </div>
               {(exportAsk || exportM.isPending) && (
                 <div className="export-ask" id="export-ask">
@@ -445,7 +478,8 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

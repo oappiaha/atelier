@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, uploadMedia, type Entry, type Phase, type UploadedMedia, PHASE_LABELS } from '../lib/api'
 import { toast, useCapture } from '../lib/store'
@@ -181,7 +182,10 @@ export default function CaptureSheet() {
 
   const moodSel = moodFiles.filter(m => m.sel)
 
-  return (
+  // portaled to <body>: a transformed ancestor (e.g. a .rise entry animation)
+  // would otherwise become the containing block for this fixed sheet and
+  // anchor it to the wrong box instead of the viewport bottom
+  return createPortal(
     <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-capture">
       <div className="backdrop" onClick={closeCapture} />
       <div className="sheet">
@@ -234,6 +238,16 @@ export default function CaptureSheet() {
                 <div style={{ fontSize: 18 }}>✨</div><div className="t">Inspo</div>
               </button>
             </div>
+            {dest === 'design' && (
+              <button
+                className="cap-final press"
+                id="cap-final"
+                onClick={() => { setPhotoPhase('final'); setMode('photo') }}
+              >
+                <span style={{ fontSize: 15 }}>📦</span>
+                <span className="mono">ADD FINAL PRODUCT PHOTO</span>
+              </button>
+            )}
             <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.8, marginTop: 14 }}>
               TIP · Share to Atelier from Instagram or Safari<br />and it lands in Inspo automatically.
             </div>
@@ -424,6 +438,7 @@ export default function CaptureSheet() {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

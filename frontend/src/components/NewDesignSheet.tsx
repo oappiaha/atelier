@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, STATUSES, STATUS_LABELS, type Design, type DesignStatus } from '../lib/api'
 import { toast, useNewDesign } from '../lib/store'
@@ -56,7 +57,8 @@ export default function NewDesignSheet() {
     }
   }
 
-  return (
+  // portaled to <body> so a transformed ancestor can't trap the fixed sheet
+  return createPortal(
     <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-newdesign">
       <div className="backdrop" onClick={closeNewDesign} />
       <div className="sheet">
@@ -115,6 +117,7 @@ export default function NewDesignSheet() {
           </button>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

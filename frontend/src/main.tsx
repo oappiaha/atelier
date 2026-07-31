@@ -17,8 +17,11 @@ import Studio from './views/Studio'
 import Login from './views/Login'
 import PublicGallery from './views/PublicGallery'
 
+// staleTime 5 min: presigned image URLs in responses are now stable for days
+// (server-side memo), so refetches are cheap but still pointless every 30s —
+// window-focus refetch keeps a long-lived PWA fresh.
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { staleTime: 30_000, retry: 1 } },
+  defaultOptions: { queries: { staleTime: 300_000, retry: 1 } },
 })
 
 // Routes per TDD §10.1

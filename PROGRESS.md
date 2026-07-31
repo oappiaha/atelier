@@ -194,6 +194,27 @@ cache keys stay true to painted pixels and replays remain 100% cache hits
 included). Large residual fraction is logged as a segmentation-quality
 signal. Suite 220 (9 new in `tests/test_coverage.py`).
 
+## Studio UX pass (2026-07-31)
+
+- **Trapped-fixed-overlay bug (root cause of "lightbox opens mid-page" and
+  "capture sheet is off"):** `.rise{animation:… both}` retained an identity
+  transform after the entry animation, making every `.rise` ancestor a
+  containing block for `position:fixed` — modals anchored to the sheet's box
+  instead of the viewport. Fixed twice over: `.rise` now fills `backwards`,
+  and every fixed overlay (colorway lightbox, palette detail, capture/share/
+  new-design sheets) renders through `createPortal(document.body)`.
+- **Images vanishing after ~1h / re-downloading every refetch:** presigned
+  GET URLs were minted fresh per response (1h TTL, new signature = new URL =
+  no browser caching; a tab focused >1h watched them die). `presign_get` now
+  signs for the SigV4 max (7 days) and memoizes per bucket/key for 6 days —
+  stable URLs across requests, browser cache works. Query staleTime 30s→5min;
+  palette corpus cached for the session (static).
+- **Lightbox cleanup:** ✕ icon close in the corner (plus Esc + backdrop),
+  hide = eye-off icon button with tooltip — no more "✕ HIDE"/"CLOSE" text
+  row overlap. **"⧉ NEW STUDY"** is now a real primary button.
+- **Capture sheet:** one-tap "📦 ADD FINAL PRODUCT PHOTO" row (jumps to
+  photo mode with phase=final preselected) when capturing to a design.
+
 ## CI (live 2026-07-29)
 
 GitHub `oappiaha/atelier`, Actions on every push/PR: backend = ruff + full

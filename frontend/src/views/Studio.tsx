@@ -72,6 +72,9 @@ export default function Studio() {
   const palettesQ = useQuery({
     queryKey: ['palettes', countFacet, palQ],
     queryFn: () => fetchPalettes({ count: countFacet ?? undefined, q: palQ || undefined }),
+    // the Sanzo corpus is static (seeded once) — never refetch, keep for the session
+    staleTime: Infinity,
+    gcTime: 24 * 3600_000,
   })
 
   const photo = useMemo(
@@ -326,14 +329,13 @@ export default function Studio() {
             </div>
             {frozen && (
               <button
-                className="kbtn gc-open press"
+                className="kbtn gc-open press dup-btn"
                 id="study-duplicate"
                 disabled={duplicateM.isPending}
-                style={{ width: 'auto', padding: '0 12px' }}
                 title="Fork this study into a fresh draft — slots, locks, anchors and palette carried over"
                 onClick={() => duplicateM.mutate()}
               >
-                {duplicateM.isPending ? '…' : '⧉ NEW STUDY FROM THIS'}
+                {duplicateM.isPending ? '…' : '⧉ NEW STUDY'}
               </button>
             )}
           </div>

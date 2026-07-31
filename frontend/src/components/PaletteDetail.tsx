@@ -7,6 +7,7 @@
 // Shortlist/favourites: §2 has no palette-favourite table and §9 no route —
 // deliberately NOT invented here (documented M8 skip).
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchPaletteDetail, type Palette } from '../lib/api'
 
@@ -29,9 +30,15 @@ export default function PaletteDetail({
   const p = q.data
   const isActive = shownId === activeId
 
-  return (
+  // portaled to <body>: a transformed ancestor would trap this fixed overlay
+  return createPortal(
     <div className="cwlb" id="pal-detail" onClick={onClose}>
       <div className="cwlb-body pald-body" onClick={e => e.stopPropagation()}>
+        <button className="cwlb-close press" aria-label="Close" title="Close" onClick={onClose}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+        </button>
         {!p ? (
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', padding: 24 }}>
             {q.isError ? 'Could not load this palette.' : 'Loading palette…'}
@@ -89,12 +96,12 @@ export default function PaletteDetail({
               >
                 {isActive ? '✓ IN USE' : frozen ? 'STUDY FROZEN' : busy ? '…' : 'USE IN STUDY'}
               </button>
-              <button className="kbtn gc-cancel" id="pald-close" onClick={onClose}>CLOSE</button>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

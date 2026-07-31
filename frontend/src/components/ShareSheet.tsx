@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { mintShare, SCOPE_LABELS, SCOPES, type ShareScope } from '../lib/api'
 import { toast, useShare } from '../lib/store'
@@ -38,7 +39,8 @@ export default function ShareSheet() {
     }
   }
 
-  return (
+  // portaled to <body> so a transformed ancestor can't trap the fixed sheet
+  return createPortal(
     <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-share">
       <div className="backdrop" onClick={closeShare} />
       <div className="sheet">
@@ -85,6 +87,7 @@ export default function ShareSheet() {
             : 'FULL · every phase, notes included'}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

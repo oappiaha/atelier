@@ -136,7 +136,10 @@ input,textarea{font-family:inherit;}
 
 /* ── entrance system — fires on MOUNT ONLY, never on state change ── */
 @keyframes riseIn{from{opacity:0;transform:translateY(16px) scale(.985);}to{opacity:1;transform:none;}}
-.rise{animation:riseIn .6s var(--ease) both;}
+/* fill: backwards, NOT both — `both` retains a computed transform (identity
+   matrix) after the animation ends, which turns the element into a containing
+   block for position:fixed and traps modals/sheets rendered inside it. */
+.rise{animation:riseIn .6s var(--ease) backwards;}
 .reveal{opacity:0;transform:translateY(20px) scale(.98);
   transition:opacity .7s var(--ease),transform .7s var(--ease);}
 .reveal.in{opacity:1;transform:none;}

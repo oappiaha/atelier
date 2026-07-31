@@ -49,12 +49,36 @@ def presign_put(key: str, content_type: str, expires: int = 900) -> str:
     )
 
 
-def presign_get(key: str, expires: int = 3600) -> str:
-    return get_s3().generate_presigned_url(
+# Read URLs are minted per response, so a fresh signature every call means a
+# fresh URL every refetch — the browser can never cache an image, and a URL
+# held by a long-lived page dies at expiry (the "images vanish after an hour"
+# bug). Sign for the SigV4 maximum (7 days) and memoize per key for most of
+# that window: the same URL comes back across requests, browser caching works,
+# and only a tab left open for ~6 days straight can watch a URL expire.
+_GET_URL_TTL = 7 * 24 * 3600  # SigV4 hard maximum
+_GET_URL_REUSE = 6 * 24 * 3600
+_get_url_cache: dict[str, tuple[str, float]] = {}
+
+
+def presign_get(key: str, expires: int = _GET_URL_TTL) -> str:
+    import time
+
+    now = time.monotonic()
+    bucket = get_settings().s3_bucket
+    cache_key = f"{bucket}/{key}"
+    hit = _get_url_cache.get(cache_key) if expires == _GET_URL_TTL else None
+    if hit and hit[1] > now:
+        return hit[0]
+    url = get_s3().generate_presigned_url(
         "get_object",
-        Params={"Bucket": get_settings().s3_bucket, "Key": key},
+        Params={"Bucket": bucket, "Key": key},
         ExpiresIn=expires,
     )
+    if expires == _GET_URL_TTL:
+        if len(_get_url_cache) > 8192:  # unbounded-growth backstop
+            _get_url_cache.clear()
+        _get_url_cache[cache_key] = (url, now + _GET_URL_REUSE)
+    return url
 
 
 def presign_download(key: str, filename: str, expires: int = 3600) -> str:
