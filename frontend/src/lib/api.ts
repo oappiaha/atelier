@@ -24,6 +24,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (location.pathname !== '/login') location.assign('/login')
   }
   if (!res.ok) throw new ApiError(res.status, await res.text())
+  // 204 No Content (DELETE endpoints) has no body — res.json() would throw
+  if (res.status === 204) return undefined as T
   return res.json() as Promise<T>
 }
 
