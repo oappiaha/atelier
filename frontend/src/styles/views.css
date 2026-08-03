@@ -412,6 +412,11 @@ textarea.field{min-height:84px;resize:none;}
 .gc-open{width:auto;height:auto;padding:8px 12px;font-family:'DM Mono';
   font-size:8.5px;letter-spacing:.1em;flex-shrink:0;}
 .gc-open.latched{background:var(--ink);color:#FFF;border-color:var(--ink);}
+/* draft delete key on hub cards — floats over the card corner */
+.sg-del{position:absolute;top:8px;right:8px;z-index:2;width:26px;height:26px;border-radius:999px;
+  display:flex;align-items:center;justify-content:center;color:var(--fog);
+  background:rgba(252,253,255,.9);border:1px solid var(--stroke);}
+.sg-del:hover{color:var(--warn);border-color:var(--warn);}
 /* the study-fork key: a real primary action, not a caption-sized afterthought */
 .dup-btn{width:auto;height:auto;padding:11px 18px;font-size:10px;letter-spacing:.12em;
   background:var(--ink);color:#FFF;border-color:var(--ink);border-radius:13px;}

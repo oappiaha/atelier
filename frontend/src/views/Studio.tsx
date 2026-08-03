@@ -327,6 +327,15 @@ export default function Studio() {
             <div className="mono" id="study-status" style={{ fontSize: 9, letterSpacing: '.12em', color: 'var(--fog)' }}>
               {study.data ? `${study.data.status.toUpperCase()} · #${study.data.palette_id} · ${palette?.name ?? '…'}` : 'LOADING…'}
             </div>
+            <button
+              className="kbtn gc-open press"
+              id="study-hub-link"
+              style={{ width: 'auto', padding: '0 12px' }}
+              title="All studies for this product"
+              onClick={() => navigate(`/d/${designId}/studio`)}
+            >
+              ⊞ ALL STUDIES
+            </button>
             {frozen && (
               <button
                 className="kbtn gc-open press dup-btn"

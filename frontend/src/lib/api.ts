@@ -508,6 +508,9 @@ export const segmentMedia = (mediaId: string) =>
 export const fetchStudy = (studyId: string) => api<Study>(`/studies/${studyId}`)
 export const createStudy = (body: { design_id: string; base_media_id: string; palette_id: string }) =>
   api<Study>('/studies', { method: 'POST', body: JSON.stringify(body) })
+/** Drafts only — the API 409s on anything generated (spend records). */
+export const deleteStudy = (studyId: string) =>
+  api<void>(`/studies/${studyId}`, { method: 'DELETE' })
 export const putSlots = (studyId: string, slots: SlotIn[]) =>
   api<Study>(`/studies/${studyId}/slots`, { method: 'PUT', body: JSON.stringify(slots) })
 export const estimateStudy = (studyId: string) =>

@@ -61,16 +61,35 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
   }
 
   // ── pins: server state (M8) ────────────────────────────────────────────────
+  // Optimistic: the star flips the cache instantly (the POST also builds the
+  // pin→timeline entry server-side, which takes seconds — the UI must not
+  // wait on it). Rolled back on error; settled state comes from the refetch.
+  const flipStatus = (id: string, status: Colorway['status']) => {
+    qc.setQueryData<ColorwaysOut>(['colorways', studyId], old =>
+      old && {
+        ...old,
+        colorways: old.colorways.map(c => (c.id === id ? { ...c, status } : c)),
+      })
+  }
   const pinM = useMutation({
     mutationFn: (cw: Colorway) =>
       cw.status === 'pinned' ? unpinColorway(cw.id) : pinColorway(cw.id),
+    onMutate: async (cw: Colorway) => {
+      await qc.cancelQueries({ queryKey: ['colorways', studyId] })
+      const prev = qc.getQueryData<ColorwaysOut>(['colorways', studyId])
+      flipStatus(cw.id, cw.status === 'pinned' ? 'ready' : 'pinned')
+      return { prev }
+    },
     onSuccess: out => {
       toast(out.status === 'pinned'
-        ? 'Pinned — copied to cw/pinned/, never expires'
+        ? 'Pinned — saved forever, added to the design timeline'
         : 'Unpinned')
-      refetchSoon()
     },
-    onError: e => toast(apiErrorDetail(e, 'Could not update the pin')),
+    onError: (e, _cw, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['colorways', studyId], ctx.prev)
+      toast(apiErrorDetail(e, 'Could not update the pin'))
+    },
+    onSettled: () => refetchSoon(),
   })
 
   // one-time migration: T3's localStorage pins → the API (then clear the key)
@@ -105,15 +124,24 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
   const rejectM = useMutation({
     mutationFn: (cw: Colorway) =>
       cw.status === 'rejected' ? unrejectColorway(cw.id) : rejectColorway(cw.id),
-    onSuccess: out => {
-      toast(out.status === 'rejected' ? 'Hidden — moved to the shelf below' : 'Restored to the sheet')
-      if (out.status === 'rejected' && detailId === out.id) {
+    onMutate: async (cw: Colorway) => {
+      await qc.cancelQueries({ queryKey: ['colorways', studyId] })
+      const prev = qc.getQueryData<ColorwaysOut>(['colorways', studyId])
+      flipStatus(cw.id, cw.status === 'rejected' ? 'ready' : 'rejected')
+      if (cw.status !== 'rejected' && detailId === cw.id) {
         setDetailId(null)
         setExportAsk(false)
       }
-      refetchSoon()
+      return { prev }
     },
-    onError: e => toast(apiErrorDetail(e, 'Could not update the colorway')),
+    onSuccess: out => {
+      toast(out.status === 'rejected' ? 'Hidden — moved to the shelf below' : 'Restored to the sheet')
+    },
+    onError: (e, _cw, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['colorways', studyId], ctx.prev)
+      toast(apiErrorDetail(e, 'Could not update the colorway'))
+    },
+    onSettled: () => refetchSoon(),
   })
 
   const genRemaining = useMutation({
@@ -291,7 +319,6 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                     className={`cw-pin press${pinned ? ' on' : ''}`}
                     data-cw-pin={cw.permutation_idx}
                     aria-label={pinned ? 'Unpin' : 'Pin'}
-                    disabled={pinM.isPending}
                     onClick={() => pinM.mutate(cw)}
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill={pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
@@ -305,7 +332,6 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                     data-cw-hide={cw.permutation_idx}
                     aria-label="Hide (reject)"
                     title="Hide this colorway"
-                    disabled={rejectM.isPending}
                     onClick={() => rejectM.mutate(cw)}
                   >
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -415,10 +441,9 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                 <button
                   className={`kbtn gc-open${detail.status === 'pinned' ? ' latched' : ''}`}
                   id="cwlb-pin"
-                  disabled={pinM.isPending}
                   onClick={() => pinM.mutate(detail)}
                 >
-                  {pinM.isPending ? '…' : detail.status === 'pinned' ? '★ PINNED' : '☆ PIN'}
+                  {detail.status === 'pinned' ? '★ PINNED' : '☆ PIN'}
                 </button>
                 <button
                   className="kbtn gc-open"

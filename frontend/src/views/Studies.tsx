@@ -4,8 +4,9 @@
 // Tapping a card opens the Studio it belongs to (/d/{design}/study/{id}).
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { fetchStudies, type StudyGalleryItem } from '../lib/api'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { apiErrorDetail, deleteStudy, fetchStudies, type StudyGalleryItem } from '../lib/api'
+import { toast } from '../lib/store'
 
 const fmtDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -25,7 +26,7 @@ const ST_CLASS: Record<string, string> = {
   cancelled: 'failed',
 }
 
-function StudyCard({ s, i, onOpen }: { s: StudyGalleryItem; i: number; onOpen: () => void }) {
+export function StudyCard({ s, i, onOpen }: { s: StudyGalleryItem; i: number; onOpen: () => void }) {
   const hero = s.hero_thumb_url
   return (
     <button
@@ -84,8 +85,19 @@ interface DesignGroup {
 
 export default function Studies() {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['studies'], queryFn: fetchStudies })
   const studies = data ?? []
+
+  // drafts are free to delete; generated studies are spend records (API 409s)
+  const deleteM = useMutation({
+    mutationFn: (id: string) => deleteStudy(id),
+    onSuccess: () => {
+      toast('Draft deleted')
+      qc.invalidateQueries({ queryKey: ['studies'] })
+    },
+    onError: e => toast(apiErrorDetail(e, 'Could not delete the draft')),
+  })
 
   // group per design. Rows arrive newest-study-first, so first-appearance
   // order puts the most recently worked-on design at the top.
@@ -149,12 +161,26 @@ export default function Studies() {
                 </div>
                 <div className="cw-grid sg-grid">
                   {g.items.map((s, i) => (
-                    <StudyCard
-                      key={s.id}
-                      s={s}
-                      i={i}
-                      onOpen={() => navigate(`/d/${s.design_id}/study/${s.id}`)}
-                    />
+                    <div key={s.id} style={{ position: 'relative' }}>
+                      <StudyCard
+                        s={s}
+                        i={i}
+                        onOpen={() => navigate(`/d/${s.design_id}/study/${s.id}`)}
+                      />
+                      {s.status === 'draft' && (
+                        <button
+                          className="sg-del press"
+                          aria-label="Delete draft"
+                          title="Delete this draft (free — nothing was generated)"
+                          disabled={deleteM.isPending}
+                          onClick={() => deleteM.mutate(s.id)}
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                            <path d="M6 6l12 12M18 6L6 18" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               </section>
