@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api, fetchInbox, type Project } from '../lib/api'
+import { useNewDesign } from '../lib/store'
 
 export default function Home() {
   const navigate = useNavigate()
+  const openNewDesign = useNewDesign(s => s.openNewDesign)
   const { data: projects, isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => api<Project[]>('/projects'),
@@ -67,6 +69,28 @@ export default function Home() {
                 </div>
               </div>
             ))}
+            {/* new design straight from Home: one project → preselect it;
+               several → the sheet shows a project picker */}
+            <button
+              className="panel press"
+              id="home-new-design"
+              style={{
+                padding: 20, background: 'transparent', boxShadow: 'none',
+                border: '1.5px dashed var(--stroke-strong)', color: 'var(--faint)',
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', gap: 6, minHeight: 96, cursor: 'pointer',
+              }}
+              onClick={() =>
+                openNewDesign(
+                  projects.length === 1
+                    ? { id: projects[0].id, name: projects[0].name }
+                    : null,
+                )
+              }
+            >
+              <span style={{ fontSize: 22, fontWeight: 300, lineHeight: 1 }}>+</span>
+              <span className="mono" style={{ fontSize: 9.5, letterSpacing: '.12em' }}>NEW DESIGN</span>
+            </button>
           </div>
         )}
       </div>

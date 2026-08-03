@@ -92,9 +92,10 @@ export interface ProjectCtx {
 
 interface NewDesignState {
   open: boolean
-  /** project the design will be created in (set by the Project view) */
+  /** project the design will be created in. Preselected by the Project view;
+   *  null (Home with several projects) → the sheet shows a project picker. */
   project: ProjectCtx | null
-  openNewDesign: (project: ProjectCtx) => void
+  openNewDesign: (project: ProjectCtx | null) => void
   closeNewDesign: () => void
 }
 

@@ -59,6 +59,16 @@ E_BAND = 6  # boundary band width for ghost fraction
 GHOST_DE = 8.0  # "still base-coloured" threshold
 GHOST_ALERT = 0.20  # gate condition 2: threshold alert only, no auto-retry
 
+# ΔE2000 is evaluated in pixel chunks (PARALLEL-1). ciede2000() is ~40 float64
+# temporaries wide, so a whole slot at once costs ~390 bytes/px: measured on a
+# 1536² frame with a 1.21M-px slot, one node peaked at 590MB RSS — more than the
+# worker's entire 512m limit — and colorways now paint CONCURRENTLY. At 64k
+# pixels a pass the same node peaks at 164MB and the guards still take ~0.9s
+# against a ~39s model call. Exactly result-preserving: the ghost fraction is a
+# mean of per-pixel booleans (counted per chunk) and the in-region ΔE is a
+# median over the same value set (verified identical to 4 decimal places).
+DE_CHUNK_PX = 65_536
+
 # The T1-validated per-region prompt (gate condition 3) — ported verbatim
 # from t1/scripts/run_calls.py NEW_TMPL. The blanket "keep metal hardware
 # silver" line is BANNED: it is what metallised the embroidered crest in M0.
@@ -313,9 +323,16 @@ def ghost_fraction(comp: Image.Image, base: Image.Image, mask: np.ndarray) -> fl
     band = mask & ~erode(mask, E_BAND)
     if not band.any():
         return 0.0
-    la = srgb_to_lab(np.asarray(comp.convert("RGB"))[band])
-    lb = srgb_to_lab(np.asarray(base.convert("RGB"))[band])
-    return float((ciede2000(la, lb) < GHOST_DE).mean())
+    ca = np.asarray(comp.convert("RGB"))[band]
+    cb = np.asarray(base.convert("RGB"))[band]
+    below = total = 0
+    for i in range(0, len(ca), DE_CHUNK_PX):
+        d = ciede2000(
+            srgb_to_lab(ca[i : i + DE_CHUNK_PX]), srgb_to_lab(cb[i : i + DE_CHUNK_PX])
+        )
+        below += int((d < GHOST_DE).sum())
+        total += int(d.size)
+    return below / total
 
 
 def in_region_delta_e(
@@ -329,9 +346,13 @@ def in_region_delta_e(
         core = mask
     if not core.any():
         return 0.0
-    lab = srgb_to_lab(np.asarray(comp.convert("RGB"))[core])
-    tgt = np.broadcast_to(np.array(target_lab, dtype=np.float64), lab.shape)
-    return float(np.median(ciede2000(lab, tgt)))
+    px = np.asarray(comp.convert("RGB"))[core]
+    tgt = np.array(target_lab, dtype=np.float64)
+    de = np.empty(len(px), dtype=np.float64)
+    for i in range(0, len(px), DE_CHUNK_PX):
+        lab = srgb_to_lab(px[i : i + DE_CHUNK_PX])
+        de[i : i + DE_CHUNK_PX] = ciede2000(lab, np.broadcast_to(tgt, lab.shape))
+    return float(np.median(de))
 
 
 # ── cost allocation (§8.11 reconciliation) ───────────────────────────────────

@@ -32,6 +32,11 @@ os.environ["REDIS_URL"] = "redis://localhost:6380/1"
 # env vars override the .env file — blank means cutout tasks skip unless a
 # test monkeypatches the setting and mocks the HTTP boundary
 os.environ["PHOTOROOM_API_KEY"] = ""
+# same guard for Seedream (§8.4: 6.75¢ a call). Generation tests mock
+# app.workers.generate.call_seedream, but a mock that is undone/missed used to
+# fall through to the REAL fal queue with the key from .env — one test doing
+# that quietly spent ~20¢. Blank key = the call fails instead of billing.
+os.environ["FAL_API_KEY"] = ""
 # .env flipped to PHOTOROOM_SANDBOX=false when billing went live (2026-07-29)
 # — the suite pins the config DEFAULT (sandbox) so test behaviour never
 # tracks prod-mode toggles in .env (test_cutout asserts the sandbox_ prefix)

@@ -170,6 +170,9 @@ function MTile({
         </svg>
       </div>
       <div className="m-tag">{media.phase ? PHASE_LABELS[media.phase] : media.kind}</div>
+      {media.source_app === 'wada' && (
+        <div className="m-tag" style={{ left: 'auto', right: 8 }}>WADA</div>
+      )}
     </div>
   )
 }

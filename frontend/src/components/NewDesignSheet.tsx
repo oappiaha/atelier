@@ -1,21 +1,39 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useQueryClient } from '@tanstack/react-query'
-import { api, STATUSES, STATUS_LABELS, type Design, type DesignStatus } from '../lib/api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  api, STATUSES, STATUS_LABELS,
+  type Design, type DesignStatus, type Project,
+} from '../lib/api'
 import { toast, useNewDesign } from '../lib/store'
 
 /** New-design sheet: name (required) + optional materials and status.
  *  POST /designs assigns index_no automatically and defaults to 'developing';
- *  a non-default status is applied with a follow-up PATCH. */
+ *  a non-default status is applied with a follow-up PATCH.
+ *  Opened with a preselected project (Project view / Home with one project),
+ *  or with none (Home with several) — then a project picker row appears. */
 export default function NewDesignSheet() {
-  const { open, project, closeNewDesign } = useNewDesign()
+  const { open, project: preselected, closeNewDesign } = useNewDesign()
   const qc = useQueryClient()
 
   const [name, setName] = useState('')
   const [materials, setMaterials] = useState('')
   const [status, setStatus] = useState<DesignStatus>('developing')
+  const [pickedId, setPickedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const nameRef = useRef<HTMLInputElement>(null)
+
+  // picker data — only fetched when the sheet actually needs to offer a choice
+  const { data: projects } = useQuery({
+    queryKey: ['projects'],
+    queryFn: () => api<Project[]>('/projects'),
+    enabled: open && !preselected,
+  })
+  // preselected wins; else the explicit pick; else a lone project picks itself
+  const picked =
+    projects?.find(p => p.id === pickedId) ??
+    (projects?.length === 1 ? projects[0] : undefined)
+  const project = preselected ?? picked ?? null
 
   // reset on every open; focus once the slide-up transition has started
   useEffect(() => {
@@ -23,6 +41,7 @@ export default function NewDesignSheet() {
       setName('')
       setMaterials('')
       setStatus('developing')
+      setPickedId(null)
       setBusy(false)
       const t = setTimeout(() => nameRef.current?.focus(), 80)
       return () => clearTimeout(t)
@@ -67,8 +86,28 @@ export default function NewDesignSheet() {
           New design
         </div>
         <div style={{ fontSize: 12, color: 'var(--fog)', marginBottom: 12 }}>
-          {project ? `Joins the ${project.name} index — ` : ''}the index number is assigned automatically.
+          {project
+            ? `Joins the ${project.name} index — `
+            : preselected === null && (projects?.length ?? 0) > 1
+              ? 'Pick a project — '
+              : ''}
+          the index number is assigned automatically.
         </div>
+
+        {!preselected && (projects?.length ?? 0) > 1 && (
+          <div className="chips" style={{ marginBottom: 10 }} id="nd-projects">
+            {projects!.map(p => (
+              <button
+                key={p.id}
+                type="button"
+                className={`chip${pickedId === p.id ? ' on' : ''}`}
+                onClick={() => setPickedId(p.id)}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         <form
           onSubmit={e => {
@@ -110,10 +149,10 @@ export default function NewDesignSheet() {
             type="submit"
             className="primary-btn press"
             id="nd-create"
-            disabled={busy || !name.trim()}
-            style={!name.trim() ? { opacity: 0.5 } : undefined}
+            disabled={busy || !name.trim() || !project}
+            style={!name.trim() || !project ? { opacity: 0.5 } : undefined}
           >
-            {busy ? 'Creating…' : 'Create design'}
+            {busy ? 'Creating…' : project ? 'Create design' : 'Pick a project first'}
           </button>
         </form>
       </div>

@@ -45,6 +45,15 @@ services:
     restart: unless-stopped
     env_file: .env.prod
     # one worker covering BOTH queues at this scale: default (thumbs) + wada (model calls)
+    #
+    # concurrency stays 2 under the PARALLEL-1 colorway fan-out (measured, not
+    # guessed): the wada pipeline is network-bound at the fal call (~39s) but
+    # MEMORY-bound at the per-node guards — a 1536² frame with a 1.21M-px slot
+    # peaks at ~164MB RSS per task even after the ΔE chunking in
+    # app/wada/generation.py (it was 590MB before). Two concurrent chains fit
+    # inside mem_limit 512m with room for the forked interpreters; three do not
+    # (3 × ~164MB of pixel work + ~80MB per prefork child ≈ 730MB). Raise
+    # mem_limit to 768m FIRST if this is ever taken to --concurrency=3.
     command: celery -A app.workers.celery_app worker --loglevel=info -Q celery,wada --concurrency=2
     depends_on:
       db:

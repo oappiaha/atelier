@@ -12,6 +12,12 @@ TDD-pinned numbers: K=3, C=3, full sheet → 6 colorways, 15 trie nodes
 (§8.8), ledgered to exactly 101¢ = the $1.01 the estimate shows (§8.4).
 Celery is bypassed: the route's .delay is captured, and tests invoke the
 task function in-process against the isolated test DB/bucket.
+
+PARALLEL-1: the route fans out to ONE wada.generate_colorway task per
+colorway, so `fal["enqueued"]` holds one entry per colorway and _run_enqueued
+executes them in dispatch order. The concurrency-specific behaviour (shared
+prefix nodes claimed once, run closure by the last child, stale-claim takeover)
+lives in tests/test_parallel_generation.py.
 """
 
 import io
@@ -103,16 +109,19 @@ def fal(monkeypatch):
 
     enqueued: list[tuple] = []
     monkeypatch.setattr(
-        W.generate_study, "delay", lambda *a, **k: enqueued.append(a) or None
+        W.generate_colorway, "delay", lambda *a, **k: enqueued.append(a) or None
     )
+    # the claim protocol must not make a single-threaded suite sleep
+    monkeypatch.setattr(W, "CLAIM_POLL_S", 0.02)
     return {"calls": calls, "enqueued": enqueued}
 
 
 def _run_enqueued(fal):
-    """Execute every captured enqueue in-process (the worker's task fn)."""
-    from app.workers.generate import generate_study
+    """Execute every captured child enqueue in-process, one colorway per task
+    (the PARALLEL-1 fan-out, serialised — order is the dispatch order)."""
+    from app.workers.generate import generate_colorway
 
-    results = [generate_study(*args) for args in fal["enqueued"]]
+    results = [generate_colorway(*args) for args in fal["enqueued"]]
     fal["enqueued"].clear()
     return results
 
@@ -178,7 +187,7 @@ async def test_generate_eager_default(authed, gen_setup, fal):
     idx_of = {c["id"]: c["permutation_idx"] for c in cw["colorways"]}
     assert sorted(idx_of[i] for i in out["requested"]) == [0, 1]
 
-    assert len(fal["enqueued"]) == 1
+    assert len(fal["enqueued"]) == 2  # PARALLEL-1: one child task per colorway
     _run_enqueued(fal)
 
     r = await authed.get(f"/studies/{study['id']}/colorways")
@@ -403,7 +412,7 @@ async def test_resume_after_mid_chain_crash(authed, gen_setup, fal, monkeypatch)
 
     monkeypatch.setattr(W, "call_seedream", crashy)
     with pytest.raises(KeyboardInterrupt):
-        W.generate_study(study["id"], [str(i) for i in requested])
+        W.generate_colorway(study["id"], str(requested[0]))
 
     # one node persisted, colorway stuck 'generating', study still 'generating'
     with _db() as conn:
@@ -412,10 +421,17 @@ async def test_resume_after_mid_chain_crash(authed, gen_setup, fal, monkeypatch)
             (study["id"],),
         ).fetchone()
     assert n_spent == 1
+    # the dying task released its unfinished claim: node 2 is not a live claim
+    with _db() as conn:
+        (n_claims,) = conn.execute(
+            "SELECT COUNT(*) FROM gen_nodes WHERE image_key = ''"
+        ).fetchone()
+    assert n_claims == 0
 
     # a clean re-run resumes: node 1 is a cache hit, the rest generate
     monkeypatch.setattr(W, "call_seedream", real)
-    W.generate_study(study["id"], [str(i) for i in requested])
+    for cw_id in requested:
+        W.generate_colorway(study["id"], str(cw_id))
     r = await authed.get(f"/studies/{study['id']}/colorways")
     assert r.json()["ready"] == 2
     rows = _ledger(study["id"])

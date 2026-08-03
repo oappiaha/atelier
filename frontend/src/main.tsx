@@ -13,6 +13,7 @@ import Inbox from './views/Inbox'
 import Project from './views/Project'
 import Design from './views/Design'
 import Gallery from './views/Gallery'
+import Studies from './views/Studies'
 import Studio from './views/Studio'
 import Login from './views/Login'
 import PublicGallery from './views/PublicGallery'
@@ -36,6 +37,7 @@ const router = createBrowserRouter([
       { path: 'd/:designId', element: <Design /> },
       { path: 'd/:designId/study/:studyId', element: <Studio /> },
       { path: 'gallery', element: <Gallery /> },
+      { path: 'studies', element: <Studies /> },
     ],
   },
   { path: '/login', element: <Login /> },

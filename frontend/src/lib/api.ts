@@ -401,6 +401,29 @@ export interface StudySummary {
   completed_at: string | null
 }
 
+/** One card in the workspace-wide Studies gallery (/studies) — every study
+ *  ever made, across all designs. hero_thumb_url is the first PINNED
+ *  colorway's thumb, else the first ready one, else null (the card falls
+ *  back to palette blocks). */
+export interface StudyGalleryItem {
+  id: string
+  design_id: string
+  design_name: string
+  base_thumb_url: string | null
+  palette_id: string
+  palette_name: string
+  palette_hexes: string[]
+  status: string
+  created_at: string
+  planned: number
+  ready: number
+  pinned: number
+  actual_cost_cents: number
+  hero_thumb_url: string | null
+}
+
+export const fetchStudies = () => api<StudyGalleryItem[]>('/studies')
+
 // ── pins (M8, TDD §9): server-persisted — the object is COPIED to cw/pinned/
 //    so the 30-day lifecycle can never delete a pinned colorway. ────────────
 

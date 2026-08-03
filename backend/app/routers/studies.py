@@ -812,6 +812,110 @@ async def duplicate_study(
     return await _study_out(row, session)
 
 
+# ── workspace-wide Studies gallery ───────────────────────────────────────────
+#
+# GET /studies — every study in the workspace, across all designs, newest
+# first: the browse-everything view the per-design list cannot give. Additive
+# (§9's table stops at the per-design list). Each row carries what a gallery
+# card needs — design name, base-media thumb, palette (name + member hexes),
+# status, colorway counts, spend — plus a hero image: the first PINNED
+# colorway's thumb (permutation order), else the first ready one, else null
+# (the card falls back to palette blocks).
+
+
+class StudyGalleryOut(BaseModel):
+    id: uuid.UUID
+    design_id: uuid.UUID
+    design_name: str
+    base_thumb_url: str | None  # base media thumb (null until thumbs land)
+    palette_id: str
+    palette_name: str
+    palette_hexes: list[str]  # member colours, palette (color_ids) order
+    status: str
+    created_at: datetime
+    planned: int  # colorway rows; falls back to perm_planned pre-generate
+    ready: int  # ready + pinned (the ColorwaysOut 'ready' convention)
+    pinned: int
+    actual_cost_cents: int
+    hero_thumb_url: str | None  # first pinned thumb, else first ready, else null
+
+
+@router.get("/studies", response_model=list[StudyGalleryOut])
+async def list_workspace_studies(
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> list[StudyGalleryOut]:
+    rows = (
+        await session.execute(
+            text(
+                """
+                SELECT s.id, s.design_id, d.name AS design_name,
+                       m.thumb_key AS base_thumb_key,
+                       s.palette_id, pal.name AS palette_name, pal.color_ids,
+                       s.status, s.created_at, s.perm_planned, s.actual_cost_cents,
+                       cw.total AS cw_total, cw.ready AS cw_ready,
+                       cw.pinned AS cw_pinned,
+                       hero.thumb_key AS hero_thumb_key
+                FROM studies s
+                JOIN designs d ON d.id = s.design_id
+                JOIN media m ON m.id = s.base_media_id
+                JOIN palettes pal ON pal.id = s.palette_id
+                LEFT JOIN LATERAL (
+                    SELECT COUNT(*) AS total,
+                           COUNT(*) FILTER (WHERE c.status IN ('ready', 'pinned'))
+                               AS ready,
+                           COUNT(*) FILTER (WHERE c.status = 'pinned') AS pinned
+                    FROM colorways c WHERE c.study_id = s.id
+                ) cw ON true
+                LEFT JOIN LATERAL (
+                    SELECT c.thumb_key
+                    FROM colorways c
+                    JOIN permutations p ON p.id = c.permutation_id
+                    WHERE c.study_id = s.id
+                          AND c.status IN ('pinned', 'ready')
+                          AND c.thumb_key IS NOT NULL
+                    ORDER BY (c.status <> 'pinned'), p.idx
+                    LIMIT 1
+                ) hero ON true
+                WHERE s.workspace_id = :ws
+                ORDER BY s.created_at DESC
+                """
+            ),
+            {"ws": str(ctx.workspace_id)},
+        )
+    ).all()
+
+    color_ids = sorted({cid for r in rows for cid in r.color_ids})
+    hexes: dict[int, str] = {}
+    if color_ids:
+        hexes = {
+            r.id: r.hex.strip()
+            for r in (
+                await session.execute(
+                    text("SELECT id, hex FROM sanzo_colors WHERE id = ANY(CAST(:ids AS int[]))"),
+                    {"ids": color_ids},
+                )
+            ).all()
+        }
+
+    return [
+        StudyGalleryOut(
+            id=r.id, design_id=r.design_id, design_name=r.design_name,
+            base_thumb_url=presign_get(r.base_thumb_key) if r.base_thumb_key else None,
+            palette_id=r.palette_id, palette_name=r.palette_name,
+            palette_hexes=[hexes[cid] for cid in r.color_ids],
+            status=r.status, created_at=r.created_at,
+            # pre-generate there are no colorway rows — the estimate's planned
+            # count (if any) is the honest 'M' for the card's N/M line
+            planned=r.cw_total or r.perm_planned or 0,
+            ready=r.cw_ready, pinned=r.cw_pinned,
+            actual_cost_cents=r.actual_cost_cents,
+            hero_thumb_url=presign_get(r.hero_thumb_key) if r.hero_thumb_key else None,
+        )
+        for r in rows
+    ]
+
+
 @router.get("/designs/{design_id}/studies", response_model=list[StudySummary])
 async def list_design_studies(
     design_id: uuid.UUID,

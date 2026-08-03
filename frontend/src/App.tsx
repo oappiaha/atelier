@@ -53,6 +53,9 @@ export default function App() {
           <NavLink to="/gallery" className={({ isActive }) => `snav${isActive ? ' on' : ''}`}>
             Gallery
           </NavLink>
+          <NavLink to="/studies" className={({ isActive }) => `snav${isActive ? ' on' : ''}`}>
+            Studies
+          </NavLink>
         </nav>
         <div style={{ marginTop: 'auto' }}>
           <button className="gen-btn press" style={{ padding: '12px 15px' }} onClick={openCapture}>

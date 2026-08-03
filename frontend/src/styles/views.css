@@ -492,6 +492,31 @@ textarea.field{min-height:84px;resize:none;}
 @media(min-width:760px){.cwlb-img{width:58%;max-height:80dvh;}}
 .cwlb-meta{padding:18px 18px 20px;min-width:0;}
 
+/* ── STUDIES GALLERY (/studies): the contact sheet's card language, one card
+      per study across every design. Grid/card/chip/status atoms are reused
+      verbatim (.cw-grid/.cw-card/.cw-chip/.cw-st); only the label block and
+      the no-colorway placeholders are new. ── */
+.sg-grid{margin-top:12px;}
+.sg-card{text-align:left;cursor:pointer;display:block;padding:0;
+  transition:transform .4s var(--ease),border-color .3s ease,box-shadow .3s ease;}
+.sg-card:hover{transform:translateY(-3px);box-shadow:var(--s2);border-color:var(--stroke-strong);}
+.sg-card .cw-img{transition:transform .7s var(--ease);}
+.sg-card:hover .cw-img{transform:scale(1.05);}
+/* no colorway yet: the base photo, muted under a caption — or, with no photo
+   at all, the study's palette standing in as blocks */
+.sg-base{filter:grayscale(.7) brightness(1.04);opacity:.55;}
+.sg-holding{align-items:flex-end;justify-content:center;padding-bottom:12px;font-size:8px;}
+.sg-blocks{position:absolute;inset:0;display:flex;}
+.sg-blocks > *{flex:1;}
+.sg-label{padding:8px 10px 11px;min-width:0;}
+.sg-pal{font-size:8.5px;letter-spacing:.1em;color:var(--faint);margin-top:3px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sg-foot{display:flex;align-items:center;gap:6px;margin-top:8px;flex-wrap:wrap;min-width:0;}
+.sg-nums{font-size:8.5px;letter-spacing:.06em;color:var(--fog);}
+.sg-date{font-size:8px;letter-spacing:.1em;color:var(--faint);margin-top:6px;}
+/* study_status has two states the colorway chip never had */
+.cw-st.partial{color:var(--warn);border-color:rgba(178,106,0,.3);}
+
 /* ── SHARE (mock: .share-link) ── */
 .share-link{display:flex;align-items:center;justify-content:space-between;gap:9px;border-radius:14px;padding:12px 14px;
   background:var(--bg);border:1px solid var(--stroke);margin-top:12px;min-width:0;}

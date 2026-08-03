@@ -6,6 +6,12 @@ POST /colorways/{id}/pin      Pin. Physically COPIES the object from
                               alone would let the 30-day lifecycle delete the
                               one thing the user said they cared about).
                               Idempotent: pinning a pinned colorway is a 200.
+                              Pin → timeline bridge (Beezy 2026-07): a pin also
+                              registers the image as archive media and writes a
+                              phase='study' entry on the design, so the pick
+                              shows up in the design's development timeline.
+                              Idempotent by content hash across pin/unpin/pin;
+                              unpin leaves the entry alone — it's history.
 POST /colorways/{id}/unpin    Reverse (additive — §9 defines pin + reject but
                               no unpin; a pin the user cannot take back is a
                               trap, documented deviation). Copies the pinned
@@ -51,7 +57,9 @@ Documented decisions (the TDD/§9 rows are one-liners):
   §9 doesn't define).
 """
 
+import hashlib
 import io
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -66,6 +74,7 @@ from app.config import get_settings
 from app.db import get_session
 from app.routers.generation import _budget_gate
 from app.storage import copy_object, get_s3, presign_download, presign_get
+from app.workers.thumbs import enqueue_thumbs
 
 router = APIRouter(tags=["colorways"])
 
@@ -141,6 +150,137 @@ async def _set_keys(
     ).one()
 
 
+# ── pin → timeline bridge ────────────────────────────────────────────────────
+# A pin is a design decision, so it also lands on the design's development
+# timeline: the pinned PNG is registered as archive media (source_app='wada',
+# source_url = the study route) attached to a phase='study' entry. The media
+# bytes live at the canonical src/{ws}/{sha}.png key — NOT at cw/pinned/ —
+# because unpin deletes the pinned copy and the timeline is history: the entry
+# (and its image) must survive an unpin. Idempotent by content hash: the
+# media unique index (workspace_id, sha256) makes pin/unpin/pin find the
+# first pin's row and stop before creating a second entry.
+
+
+def _fetch_pin_bytes(image_key: str) -> tuple[bytes, str, int, int]:
+    """Download the just-pinned PNG; return (bytes, sha256, width, height)."""
+    s3, bucket = get_s3(), get_settings().s3_bucket
+    png = s3.get_object(Bucket=bucket, Key=image_key)["Body"].read()
+    sha = hashlib.sha256(png).hexdigest()
+    with Image.open(io.BytesIO(png)) as img:
+        width, height = img.size
+    return png, sha, width, height
+
+
+def _put_media_object(key: str, png: bytes) -> None:
+    s3, bucket = get_s3(), get_settings().s3_bucket
+    s3.put_object(Bucket=bucket, Key=key, Body=png, ContentType="image/png")
+
+
+async def _pin_timeline_entry(cw, pinned_key: str, ctx: Ctx, session: AsyncSession) -> None:
+    """Create the timeline entry + media for a freshly pinned colorway.
+
+    Runs inside the pin's transaction (committed by the caller). Only the
+    thumbnail enqueue is best-effort — the entry itself is part of the pin."""
+    png, sha, width, height = await run_in_threadpool(_fetch_pin_bytes, pinned_key)
+    ws = str(ctx.workspace_id)
+
+    existing = (
+        await session.execute(
+            text("SELECT id, entry_id, thumb_key FROM media WHERE workspace_id = :ws AND sha256 = :sha"),
+            {"ws": ws, "sha": sha},
+        )
+    ).one_or_none()
+    if existing is not None and existing.entry_id is not None:
+        # re-pin after unpin (or the bytes already live on an entry) — done;
+        # still chase a missing thumb, mirroring /media/commit's dedupe path
+        if existing.thumb_key is None:
+            enqueue_thumbs(str(existing.id))
+        return
+
+    info = (
+        await session.execute(
+            text(
+                """
+                SELECT s.id AS study_id, s.design_id, pal.name AS palette_name,
+                       p.idx AS perm_idx, p.mapping
+                FROM studies s
+                JOIN palettes pal ON pal.id = s.palette_id
+                JOIN permutations p ON p.study_id = s.id
+                WHERE s.id = :study_id AND p.id = :perm_id
+                """
+            ),
+            {"study_id": str(cw.study_id), "perm_id": str(cw.permutation_id)},
+        )
+    ).one()
+
+    # "Wada colorway #N — {palette} ({slot: colour, …})" — #N is the contact
+    # sheet's permutation idx, fingerprint in canonical slot order
+    mapping = info.mapping if isinstance(info.mapping, dict) else json.loads(info.mapping)
+    mapping = {int(k): v for k, v in mapping.items()}
+    labels = {
+        r.idx: r.label
+        for r in await session.execute(
+            text("SELECT idx, label FROM slots WHERE study_id = :id"),
+            {"id": str(cw.study_id)},
+        )
+    }
+    names = {
+        r.id: r.name
+        for r in await session.execute(
+            text("SELECT id, name FROM sanzo_colors WHERE id = ANY(CAST(:ids AS int[]))"),
+            {"ids": list(mapping.values())},
+        )
+    }
+    fingerprint = ", ".join(
+        f"{labels.get(idx, f'slot {idx}')}: {names.get(color_id, color_id)}"
+        for idx, color_id in sorted(mapping.items())
+    )
+    body = f"Wada colorway #{info.perm_idx} — {info.palette_name} ({fingerprint})"
+
+    entry = (
+        await session.execute(
+            text(
+                """
+                INSERT INTO entries (workspace_id, design_id, phase, body, study_id)
+                VALUES (:ws, :did, 'study', :body, :study_id)
+                RETURNING id
+                """
+            ),
+            {"ws": ws, "did": str(info.design_id), "body": body,
+             "study_id": str(cw.study_id)},
+        )
+    ).one()
+
+    media_key = f"src/{ws}/{sha}.png"  # canonical media key — survives unpin
+    if existing is None:
+        await run_in_threadpool(_put_media_object, media_key, png)
+        media_row = (
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO media (workspace_id, entry_id, kind, r2_key, sha256,
+                                       width, height, source_url, source_app)
+                    VALUES (:ws, :eid, 'image', :key, :sha, :w, :h, :src_url, 'wada')
+                    RETURNING id
+                    """
+                ),
+                {"ws": ws, "eid": str(entry.id), "key": media_key, "sha": sha,
+                 "w": width, "h": height,
+                 "src_url": f"/d/{info.design_id}/study/{cw.study_id}"},
+            )
+        ).one()
+        media_id = media_row.id
+    else:  # sha known but orphaned — attach it (trigger denormalises phase)
+        await session.execute(
+            text("UPDATE media SET entry_id = :eid WHERE id = :id"),
+            {"eid": str(entry.id), "id": str(existing.id)},
+        )
+        media_id = existing.id
+
+    # thumbnails are eventually consistent — a dead broker never fails the pin
+    enqueue_thumbs(str(media_id))
+
+
 @router.post("/colorways/{colorway_id}/pin", response_model=PinOut)
 async def pin_colorway(
     colorway_id: uuid.UUID,
@@ -161,6 +301,7 @@ async def pin_colorway(
         await run_in_threadpool(copy_object, cw.thumb_key, pinned_thumb)
 
     row = await _set_keys(session, cw.id, "pinned", pinned_key, pinned_thumb)
+    await _pin_timeline_entry(cw, pinned_key, ctx, session)
     await session.commit()
     return _pin_out(row)
 
