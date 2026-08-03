@@ -166,7 +166,7 @@ export default function StudioHub() {
                 </div>
                 <div className="cw-grid sg-grid">
                   {drafts.map((s, i) => (
-                    <div key={s.id} style={{ position: 'relative' }}>
+                    <div key={s.id} className="sg-wrap">
                       <StudyCard s={s} i={i} onOpen={() => openStudy(s)} />
                       <button
                         className="sg-del press"

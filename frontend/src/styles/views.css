@@ -412,6 +412,10 @@ textarea.field{min-height:84px;resize:none;}
 .gc-open{width:auto;height:auto;padding:8px 12px;font-family:'DM Mono';
   font-size:8.5px;letter-spacing:.1em;flex-shrink:0;}
 .gc-open.latched{background:var(--ink);color:#FFF;border-color:var(--ink);}
+/* wrapper that carries the floating delete key: must behave exactly like the
+   card as a grid item — stretch the card to the row height or rows go ragged */
+.sg-wrap{position:relative;display:flex;min-width:0;}
+.sg-wrap .sg-card{flex:1;min-width:0;}
 /* draft delete key on hub cards — floats over the card corner */
 .sg-del{position:absolute;top:8px;right:8px;z-index:2;width:26px;height:26px;border-radius:999px;
   display:flex;align-items:center;justify-content:center;color:var(--fog);

@@ -161,7 +161,7 @@ export default function Studies() {
                 </div>
                 <div className="cw-grid sg-grid">
                   {g.items.map((s, i) => (
-                    <div key={s.id} style={{ position: 'relative' }}>
+                    <div key={s.id} className="sg-wrap">
                       <StudyCard
                         s={s}
                         i={i}

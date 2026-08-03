@@ -401,7 +401,108 @@ def close_study(conn, study_id: str) -> str | None:
     )
     conn.commit()
     logger.info("study=%s run closed: %s", study_id, status)
+    if status in ("complete", "partial"):
+        # the exploration itself belongs on the design's development timeline,
+        # not only the pins (Beezy 2026-08-03). Best-effort — closing must win.
+        try:
+            study_timeline_entry(conn, study_id)
+        except Exception:
+            logger.exception("study=%s: timeline entry failed (run stays closed)", study_id)
     return status
+
+
+STUDY_ENTRY_MEDIA_MAX = 4  # lead images on the entry; the study keeps them all
+
+
+def study_timeline_entry(conn, study_id: str) -> bool:
+    """One timeline entry per study run: phase='study', body summarising the
+    exploration, up to STUDY_ENTRY_MEDIA_MAX ready colorways attached as real
+    archive media (bytes copied to src/ keys — colorway objects in cw/ are
+    subject to lifecycle expiry, archive media must not be).
+
+    Idempotent per study: the entry is keyed by (study_id, body prefix), and
+    media dedupe by sha means a colorway already on the timeline (e.g. via a
+    pin) is attached, not duplicated. Returns True if an entry was created."""
+    row = conn.execute(
+        "SELECT s.workspace_id, s.design_id, pal.name "
+        "FROM studies s JOIN palettes pal ON pal.id = s.palette_id "
+        "WHERE s.id = %s",
+        (study_id,),
+    ).fetchone()
+    if row is None:
+        return False
+    ws, design_id, palette_name = str(row[0]), str(row[1]), row[2]
+
+    if conn.execute(
+        "SELECT 1 FROM entries WHERE study_id = %s AND phase = 'study' "
+        "AND body LIKE 'Wada study%%'",
+        (study_id,),
+    ).fetchone():
+        return False  # this run is already on the timeline
+
+    cws = conn.execute(
+        "SELECT c.image_key, c.cost_cents, p.idx "
+        "FROM colorways c JOIN permutations p ON p.id = c.permutation_id "
+        "WHERE c.study_id = %s AND c.status IN ('ready', 'pinned') "
+        "AND c.image_key IS NOT NULL "
+        "ORDER BY (c.status != 'pinned'), p.idx",
+        (study_id,),
+    ).fetchall()
+    if not cws:
+        return False
+    spent = conn.execute(
+        "SELECT COALESCE(SUM(cost_cents), 0) FROM colorways WHERE study_id = %s",
+        (study_id,),
+    ).fetchone()[0]
+
+    body = (
+        f"Wada study — {palette_name}: {len(cws)} colorway"
+        f"{'' if len(cws) == 1 else 's'} ready · ${spent / 100:.2f}"
+    )
+    entry_id = conn.execute(
+        "INSERT INTO entries (workspace_id, design_id, phase, body, study_id) "
+        "VALUES (%s, %s, 'study', %s, %s) RETURNING id",
+        (ws, design_id, body, study_id),
+    ).fetchone()[0]
+
+    s3 = get_s3()
+    bucket = get_settings().s3_bucket
+    src_url = f"/d/{design_id}/study/{study_id}"
+    media_ids: list[str] = []
+    for image_key, _cost, _idx in cws[:STUDY_ENTRY_MEDIA_MAX]:
+        png = s3.get_object(Bucket=bucket, Key=image_key)["Body"].read()
+        sha = hashlib.sha256(png).hexdigest()
+        existing = conn.execute(
+            "SELECT id, entry_id FROM media WHERE workspace_id = %s AND sha256 = %s",
+            (ws, sha),
+        ).fetchone()
+        if existing is not None:
+            if existing[1] is None:  # orphaned bytes — attach to this entry
+                conn.execute(
+                    "UPDATE media SET entry_id = %s WHERE id = %s",
+                    (entry_id, existing[0]),
+                )
+                media_ids.append(str(existing[0]))
+            continue  # already on an entry (e.g. pinned earlier) — no duplicate
+        with Image.open(io.BytesIO(png)) as img:
+            width, height = img.size
+        media_key = f"src/{ws}/{sha}.png"
+        s3.put_object(Bucket=bucket, Key=media_key, Body=png, ContentType="image/png")
+        mid = conn.execute(
+            "INSERT INTO media (workspace_id, entry_id, kind, r2_key, sha256, "
+            "                   width, height, source_url, source_app) "
+            "VALUES (%s, %s, 'image', %s, %s, %s, %s, %s, 'wada') RETURNING id",
+            (ws, entry_id, media_key, sha, width, height, src_url),
+        ).fetchone()[0]
+        media_ids.append(str(mid))
+    conn.commit()
+    for mid in media_ids:  # best-effort, mirrors /media/commit
+        try:
+            celery_app.send_task("thumbs.generate", args=[mid])
+        except Exception:  # noqa: BLE001 — broker down: backfill catches up
+            logger.warning("thumbs enqueue failed for media %s", mid)
+    logger.info("study=%s timeline entry created (%d media)", study_id, len(media_ids))
+    return True
 
 
 def finish_child(study_id: str) -> str | None:

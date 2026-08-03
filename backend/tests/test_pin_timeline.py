@@ -59,15 +59,19 @@ def _uniquify_working_object(cw_id: str) -> None:
 
 
 def _bridge_rows(study_id: str) -> tuple[list, list]:
-    """(entries, media) the bridge created for this study."""
+    """(entries, media) the PIN bridge created for this study — scoped to
+    'Wada colorway%' bodies because study closure now writes its own
+    'Wada study%' timeline entry (with media) the moment generation ends."""
     with _db() as conn:
         entries = conn.execute(
-            "SELECT id, phase, body FROM entries WHERE study_id = %s", (study_id,)
+            "SELECT id, phase, body FROM entries "
+            "WHERE study_id = %s AND body LIKE 'Wada colorway%%'",
+            (study_id,),
         ).fetchall()
         media = conn.execute(
             "SELECT m.id, m.r2_key, m.sha256, m.phase, m.source_app, m.source_url, m.design_id "
             "FROM media m JOIN entries e ON e.id = m.entry_id "
-            "WHERE e.study_id = %s",
+            "WHERE e.study_id = %s AND e.body LIKE 'Wada colorway%%'",
             (study_id,),
         ).fetchall()
     return entries, media
@@ -126,12 +130,15 @@ async def test_pin_entry_visible_on_timeline_and_media_views(authed, gen_setup, 
     design_id = gen_setup["design"]["id"]
     assert (await authed.post(f"/colorways/{cw['id']}/pin")).status_code == 200
 
-    # timeline endpoint — the §9 read path the Design view renders
+    # timeline endpoint — the §9 read path the Design view renders. The run's
+    # own 'Wada study' entry is also there now; pick the pin's entry by body.
     r = await authed.get(f"/designs/{design_id}/timeline")
     assert r.status_code == 200, r.text
-    entry = next(e for e in r.json() if e["phase"] == "study")
+    entry = next(
+        e for e in r.json()
+        if e["phase"] == "study" and e["body"].startswith("Wada colorway #")
+    )
     assert entry["study_id"] == study["id"]
-    assert entry["body"].startswith("Wada colorway #")
     assert len(entry["media"]) == 1
     img = entry["media"][0]
     assert img["kind"] == "image" and img["source_app"] == "wada"
@@ -139,13 +146,13 @@ async def test_pin_entry_visible_on_timeline_and_media_views(authed, gen_setup, 
 
     # phase filter (the Design view's chips) sees it too
     r = await authed.get(f"/designs/{design_id}/timeline", params={"phase": "study"})
-    assert [e["id"] for e in r.json()] == [entry["id"]]
+    assert entry["id"] in [e["id"] for e in r.json()]
 
     # media view — the hot media.phase query, no join through entries
     r = await authed.get(f"/designs/{design_id}/media", params={"phase": "study"})
     assert r.status_code == 200
-    (mv,) = r.json()
-    assert mv["id"] == img["id"] and mv["source_app"] == "wada"
+    mv = next(m for m in r.json() if m["id"] == img["id"])
+    assert mv["source_app"] == "wada"
 
 
 async def test_pin_thumbs_enqueue_is_best_effort(authed, gen_setup, fal, monkeypatch):  # noqa: F811
