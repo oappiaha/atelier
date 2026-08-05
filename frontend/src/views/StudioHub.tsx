@@ -259,7 +259,13 @@ export default function StudioHub() {
             <div style={{ padding: '20px 18px', textAlign: 'center' }}>
               <div className="scan-frame">
                 <img src={finding.photo.thumb_url ?? finding.photo.url} alt="" />
+                <div className="scan-grid" />
                 <div className="scan-beam" />
+                <div className="scan-dot" />
+                <div className="scan-dot d2" />
+                <div className="scan-dot d3" />
+                <div className="scan-corner tl" /><div className="scan-corner tr" />
+                <div className="scan-corner bl" /><div className="scan-corner br" />
               </div>
               <div className="syne" style={{ fontSize: 17, fontWeight: 800, marginTop: 14 }}>
                 Finding regions

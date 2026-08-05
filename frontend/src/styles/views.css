@@ -412,14 +412,46 @@ textarea.field{min-height:84px;resize:none;}
 .gc-open{width:auto;height:auto;padding:8px 12px;font-family:'DM Mono';
   font-size:8.5px;letter-spacing:.1em;flex-shrink:0;}
 .gc-open.latched{background:var(--ink);color:#FFF;border-color:var(--ink);}
-/* finding-regions scan overlay */
+/* finding-regions scan overlay — a viewfinder reading the product:
+   sweep beam + faint detection grid + corner brackets + roaming lock-on dots.
+   Pure CSS, must read at 320px and at desktop alike. */
 .scan-frame{position:relative;border-radius:16px;overflow:hidden;background:var(--bg-deep);
-  max-height:300px;display:flex;align-items:center;justify-content:center;}
-.scan-frame img{max-width:100%;max-height:300px;object-fit:contain;display:block;}
+  max-height:min(300px,42dvh);display:flex;align-items:center;justify-content:center;}
+.scan-frame img{max-width:100%;max-height:min(300px,42dvh);object-fit:contain;display:block;}
 .scan-beam{position:absolute;left:0;right:0;top:0;height:34%;pointer-events:none;
-  background:linear-gradient(180deg,transparent,rgba(90,140,255,.16) 45%,rgba(90,140,255,.4) 50%,rgba(90,140,255,.16) 55%,transparent);
-  animation:scanSweep 2.2s ease-in-out infinite;}
+  background:linear-gradient(180deg,transparent,rgba(90,140,255,.14) 42%,rgba(90,140,255,.5) 50%,rgba(90,140,255,.14) 58%,transparent);
+  animation:scanSweep 2.4s cubic-bezier(.45,0,.55,1) infinite;}
+.scan-beam::after{content:'';position:absolute;left:0;right:0;top:50%;height:1.5px;
+  background:rgba(120,160,255,.85);box-shadow:0 0 12px 2px rgba(90,140,255,.55);}
 @keyframes scanSweep{0%,100%{transform:translateY(-40%);}50%{transform:translateY(260%);}}
+.scan-grid{position:absolute;inset:0;pointer-events:none;opacity:.35;
+  background:linear-gradient(rgba(90,140,255,.25) 1px,transparent 1px),
+             linear-gradient(90deg,rgba(90,140,255,.25) 1px,transparent 1px);
+  background-size:36px 36px;
+  mask-image:radial-gradient(ellipse at center,black 30%,transparent 78%);
+  -webkit-mask-image:radial-gradient(ellipse at center,black 30%,transparent 78%);}
+.scan-corner{position:absolute;width:20px;height:20px;pointer-events:none;
+  border:2px solid rgba(90,140,255,.8);animation:cornerPulse 2.4s ease-in-out infinite;}
+.scan-corner.tl{top:9px;left:9px;border-right:none;border-bottom:none;border-radius:5px 0 0 0;}
+.scan-corner.tr{top:9px;right:9px;border-left:none;border-bottom:none;border-radius:0 5px 0 0;}
+.scan-corner.bl{bottom:9px;left:9px;border-right:none;border-top:none;border-radius:0 0 0 5px;}
+.scan-corner.br{bottom:9px;right:9px;border-left:none;border-top:none;border-radius:0 0 5px 0;}
+@keyframes cornerPulse{0%,100%{opacity:.5;}50%{opacity:1;}}
+.scan-dot{position:absolute;width:7px;height:7px;border-radius:50%;pointer-events:none;
+  background:rgba(120,160,255,.95);box-shadow:0 0 0 3px rgba(90,140,255,.22),0 0 10px rgba(90,140,255,.6);
+  animation:dotRoam 5.6s ease-in-out infinite;}
+.scan-dot.d2{animation-delay:1.9s;animation-duration:6.4s;}
+.scan-dot.d3{animation-delay:3.7s;animation-duration:7.1s;}
+@keyframes dotRoam{
+  0%,4%{opacity:0;left:28%;top:30%;}
+  8%,20%{opacity:1;left:28%;top:30%;}
+  26%,30%{opacity:0;left:28%;top:30%;}
+  34%{opacity:0;left:64%;top:52%;}
+  38%,52%{opacity:1;left:64%;top:52%;}
+  58%{opacity:0;left:64%;top:52%;}
+  64%{opacity:0;left:44%;top:72%;}
+  68%,84%{opacity:1;left:44%;top:72%;}
+  92%,100%{opacity:0;left:44%;top:72%;}}
 .scan-step{animation:stepPulse 1.6s ease-in-out infinite;}
 @keyframes stepPulse{0%,100%{opacity:1;}50%{opacity:.55;}}
 
