@@ -231,6 +231,20 @@ export default function Design() {
   const heroSrc = heroShown?.url ?? design.data?.cover_url ?? null
   const hero = useCrossfade(heroSrc)
 
+  // delete product: destructive + final — entries/media/studies cascade
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const deleteDesignM = useMutation({
+    mutationFn: () => api<void>(`/designs/${designId}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      toast('Product deleted')
+      qc.invalidateQueries({ queryKey: ['designs'] })
+      qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: ['studies'] })
+      navigate(design.data ? `/p/${design.data.project_id}` : '/')
+    },
+    onError: () => toast('Could not delete the product'),
+  })
+
   // Studio Shot: PhotoRoom presentation derivative → editorial timeline entry
   const studioShotM = useMutation({
     mutationFn: (mediaId: string) =>
@@ -468,6 +482,32 @@ export default function Design() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* danger zone: deleting a product takes its WHOLE history with it */}
+        <div className="danger-zone rise">
+          {confirmDelete ? (
+            <div className="gen-confirm" id="design-delete-confirm">
+              <span className="mono" style={{ fontSize: 9.5, color: 'var(--warn)' }}>
+                DELETES {d?.entry_count ?? 0} ENTRIES · {d?.media_count ?? 0} MEDIA · ALL STUDIES — FOREVER
+              </span>
+              <button className="kbtn gc-open" id="design-delete-cancel" onClick={() => setConfirmDelete(false)}>
+                KEEP IT
+              </button>
+              <button
+                className="kbtn gc-cancel dz-go"
+                id="design-delete-go"
+                disabled={deleteDesignM.isPending}
+                onClick={() => deleteDesignM.mutate()}
+              >
+                {deleteDesignM.isPending ? '…' : 'DELETE FOREVER'}
+              </button>
+            </div>
+          ) : (
+            <button className="dz-open mono press" id="design-delete" onClick={() => setConfirmDelete(true)}>
+              DELETE THIS PRODUCT…
+            </button>
+          )}
         </div>
       </div>
 

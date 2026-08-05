@@ -46,12 +46,16 @@ export default function StudioHub() {
 
   const [opening, setOpening] = useState(false)
   const [picking, setPicking] = useState(false)
+  // the finding-regions overlay: which photo is being scanned + step text.
+  // hidden=true keeps the loop running without the overlay ("keep browsing")
+  const [finding, setFinding] = useState<{ photo: Media; step: string; hidden: boolean } | null>(null)
   const openStudy = (s: StudyGalleryItem) => navigate(`/d/${designId}/study/${s.id}`)
 
-  // photos are real study bases; wada/photoroom derivatives are outputs, not
-  // inputs (a shadowed studio shot would poison the cutout silhouette)
+  // study bases: real photos AND photoroom studio shots (clean, centered —
+  // the pipeline makes its own cutout of whatever base is chosen). Only wada
+  // colorway OUTPUTS are excluded: recoloring a recolor muddies provenance.
   const photos = useMemo(
-    () => (media.data ?? []).filter(m => m.kind === 'image' && m.source_app !== 'wada' && m.source_app !== 'photoroom'),
+    () => (media.data ?? []).filter(m => m.kind === 'image' && m.source_app !== 'wada'),
     [media.data],
   )
 
@@ -62,18 +66,28 @@ export default function StudioHub() {
     setOpening(true)
     try {
       if (!(await fetchRegions(base.id)).length) {
-        toast('Finding regions…')
+        setFinding({ photo: base, step: 'Cutting the product out of the background…', hidden: false })
         let ok = false
         for (let i = 0; i < 20; i++) {
           const out = await segmentMedia(base.id)
           if (out.status === 'complete' && out.regions.length) { ok = true; break }
+          setFinding(f => f && {
+            ...f,
+            step: i < 2
+              ? 'Cutting the product out of the background…'
+              : i < 6
+                ? 'Reading the product — panels, straps, hardware…'
+                : 'Refining region edges to the pixel…',
+          })
           await new Promise(r => setTimeout(r, 3000))
         }
         if (!ok) {
+          setFinding(null)
           toast('Segmentation is still running — try again in a minute')
           return
         }
       }
+      setFinding(f => f && { ...f, step: 'Regions ready — opening the composer…' })
       const s = await createStudy({
         design_id: designId, base_media_id: base.id, palette_id: DEFAULT_PALETTE_ID,
       })
@@ -83,6 +97,7 @@ export default function StudioHub() {
     } catch (e) {
       toast(apiErrorDetail(e, 'Could not open the studio'))
     } finally {
+      setFinding(null)
       setOpening(false)
     }
   }
@@ -223,10 +238,46 @@ export default function StudioHub() {
                 {photos.map(m => (
                   <button key={m.id} className="base-pick press" onClick={() => startOn(m)}>
                     <img src={m.thumb_url ?? m.url} alt="" loading="lazy" />
-                    {m.phase && <span className="mono">{m.phase.toUpperCase()}</span>}
+                    <span className="mono">
+                      {m.source_app === 'photoroom' ? 'STUDIO SHOT' : m.phase?.toUpperCase() ?? 'PHOTO'}
+                    </span>
                   </button>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+
+      {/* finding-regions: the wait made visible — scan sweep over the chosen
+          photo + honest step text. Dismissible: segmentation runs server-side
+          and its result is cached, so leaving is always safe. */}
+      {finding && !finding.hidden && createPortal(
+        <div className="cwlb" id="finding-regions">
+          <div className="cwlb-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <div style={{ padding: '20px 18px', textAlign: 'center' }}>
+              <div className="scan-frame">
+                <img src={finding.photo.thumb_url ?? finding.photo.url} alt="" />
+                <div className="scan-beam" />
+              </div>
+              <div className="syne" style={{ fontSize: 17, fontWeight: 800, marginTop: 14 }}>
+                Finding regions
+              </div>
+              <div className="mono scan-step" style={{ fontSize: 9.5, letterSpacing: '.08em', color: 'var(--fog)', marginTop: 6, minHeight: 14 }}>
+                {finding.step}
+              </div>
+              <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 10, lineHeight: 1.7 }}>
+                USUALLY 10–20 SECONDS · SAFE TO KEEP BROWSING —<br />REGIONS ARE CACHED THE MOMENT THEY'RE READY
+              </div>
+              <button
+                className="kbtn gc-open press"
+                id="finding-hide"
+                style={{ width: 'auto', padding: '8px 14px', marginTop: 12 }}
+                onClick={() => setFinding(f => f && { ...f, hidden: true })}
+              >
+                KEEP BROWSING
+              </button>
             </div>
           </div>
         </div>,

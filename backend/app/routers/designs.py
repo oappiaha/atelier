@@ -191,3 +191,24 @@ async def patch_design(
             if k not in ("cover_url", "entry_count", "media_count")
         }
     )
+
+
+@router.delete("/designs/{design_id}", status_code=204)
+async def delete_design(
+    design_id: uuid.UUID,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Delete a product and everything under it — entries, media, studies,
+    colorways all cascade (§2 FKs). Destructive and final: the UI owns the
+    "are you sure" ceremony; the API only guards workspace scope. Storage
+    objects are left to lifecycle rules (orphaned keys are harmless)."""
+    row = (
+        await session.execute(
+            text("DELETE FROM designs WHERE workspace_id = :ws AND id = :id RETURNING id"),
+            {"ws": str(ctx.workspace_id), "id": str(design_id)},
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(404, "design not found")
+    await session.commit()

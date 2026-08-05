@@ -607,7 +607,13 @@ export default function Studio() {
                 </div>
                 {est ? (
                   <>
-                    <div className="est-nums" style={{ opacity: estimateM.isPending ? 0.5 : 1 }}>
+                    {estimateM.isPending && (
+                      <div className="est-busy mono" id="est-busy">
+                        <span className="spinner" />
+                        RE-PRICING THE STUDY…
+                      </div>
+                    )}
+                    <div className="est-nums" style={{ opacity: estimateM.isPending ? 0.35 : 1, transition: 'opacity .25s ease' }}>
                       <div className="est-cell"><div className="n" id="est-perms">{est.perm_total}</div><div className="t">Permutations</div></div>
                       <div className="est-cell"><div className="n" id="est-planned">{est.planned}</div><div className="t">Planned{est.cap_exceeded ? ` (cap ${est.cap})` : ''}</div></div>
                       <div className="est-cell"><div className="n" id="est-calls">{est.planned_calls}</div><div className="t">Model calls</div></div>
@@ -627,8 +633,9 @@ export default function Studio() {
                     </div>
                   </>
                 ) : (
-                  <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 10 }}>
-                    {estimateM.isPending ? 'Estimating…' : 'Paint regions into slots to price the study.'}
+                  <div className="mono" style={{ fontSize: 10, color: 'var(--faint)', marginTop: 10, display: 'flex', alignItems: 'center', gap: 7 }}>
+                    {estimateM.isPending && <span className="spinner" />}
+                    {estimateM.isPending ? 'PRICING THE STUDY…' : 'Paint regions into slots to price the study.'}
                   </div>
                 )}
                 {confirming && est ? (

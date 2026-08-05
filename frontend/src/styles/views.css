@@ -412,6 +412,32 @@ textarea.field{min-height:84px;resize:none;}
 .gc-open{width:auto;height:auto;padding:8px 12px;font-family:'DM Mono';
   font-size:8.5px;letter-spacing:.1em;flex-shrink:0;}
 .gc-open.latched{background:var(--ink);color:#FFF;border-color:var(--ink);}
+/* finding-regions scan overlay */
+.scan-frame{position:relative;border-radius:16px;overflow:hidden;background:var(--bg-deep);
+  max-height:300px;display:flex;align-items:center;justify-content:center;}
+.scan-frame img{max-width:100%;max-height:300px;object-fit:contain;display:block;}
+.scan-beam{position:absolute;left:0;right:0;top:0;height:34%;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(90,140,255,.16) 45%,rgba(90,140,255,.4) 50%,rgba(90,140,255,.16) 55%,transparent);
+  animation:scanSweep 2.2s ease-in-out infinite;}
+@keyframes scanSweep{0%,100%{transform:translateY(-40%);}50%{transform:translateY(260%);}}
+.scan-step{animation:stepPulse 1.6s ease-in-out infinite;}
+@keyframes stepPulse{0%,100%{opacity:1;}50%{opacity:.55;}}
+
+/* small inline spinner (estimate re-pricing etc.) */
+.spinner{width:11px;height:11px;border-radius:50%;flex-shrink:0;display:inline-block;
+  border:1.5px solid var(--stroke-strong);border-top-color:var(--ink);
+  animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.est-busy{display:flex;align-items:center;gap:7px;font-size:8.5px;letter-spacing:.12em;
+  color:var(--fog);margin-top:10px;}
+
+/* danger zone: quiet until touched */
+.danger-zone{margin-top:40px;padding-top:16px;border-top:1px dashed var(--stroke-strong);
+  display:flex;justify-content:flex-end;}
+.dz-open{font-size:8.5px;letter-spacing:.14em;color:var(--faint);padding:8px 4px;}
+.dz-open:hover{color:var(--warn);}
+.dz-go{color:#FFF;background:var(--warn);border-color:var(--warn);}
+
 /* studio-shot key in the lightbox meta strip */
 .lb-studio{margin-top:12px;font-size:9px;letter-spacing:.12em;padding:9px 14px;border-radius:999px;
   color:#FFF;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);}
