@@ -78,11 +78,16 @@ async def test_studio_shot_creates_editorial_entry_and_media(
     assert entry["body"].startswith("Studio shot")
     assert any(x["id"] == m["id"] for x in entry["media"])
 
-    # identical bytes again → no second entry/media, created=False
+    # repeat: PhotoRoom's shadow render is NOT byte-deterministic, so make the
+    # fake return DIFFERENT bytes — the provenance gate must still dedupe
+    # WITHOUT a second model call (found live: sha dedupe alone re-billed)
+    photoroom_studio["out"]["png"] = _fake_studio_png(color=(200, 200, 200))
+    n_calls = len(photoroom_studio["calls"])
     r2 = await authed.post(f"/media/{media['id']}/studio-shot")
     assert r2.status_code == 201
     assert r2.json()["created"] is False
     assert r2.json()["media"]["id"] == m["id"]
+    assert len(photoroom_studio["calls"]) == n_calls  # $0 — model never called
     tl2 = (await authed.get(f"/designs/{design['id']}/timeline")).json()
     assert sum(1 for e in tl2 if (e["body"] or "").startswith("Studio shot")) == 1
 

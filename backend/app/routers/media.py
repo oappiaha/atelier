@@ -325,12 +325,27 @@ async def studio_shot(
     if src.design_id is None:
         raise HTTPException(422, "triage this photo to a design first")
 
+    ws = str(ctx.workspace_id)
+    # ONE studio shot per source photo, gated by PROVENANCE — PhotoRoom's AI
+    # shadow is not byte-deterministic, so sha dedupe alone would happily pay
+    # for a new near-identical derivative on every click (found live 2026-08-04).
+    # Checked BEFORE the model call: a repeat costs $0. Redo = delete the entry.
+    prior = (
+        await session.execute(
+            text(
+                "SELECT * FROM media WHERE workspace_id = :ws "
+                "AND source_app = 'photoroom' AND source_url = :src AND entry_id IS NOT NULL"
+            ),
+            {"ws": ws, "src": f"media:{media_id}"},
+        )
+    ).one_or_none()
+    if prior is not None:
+        return StudioShotOut(entry_id=prior.entry_id, media=_media_out(prior), created=False)
+
     try:
         png, sha, width, height = await run_in_threadpool(_studio_shot_bytes, src.r2_key)
     except _httpx.HTTPError as e:
         raise HTTPException(502, f"PhotoRoom edit failed: {e}") from e
-
-    ws = str(ctx.workspace_id)
     existing = (
         await session.execute(
             text("SELECT * FROM media WHERE workspace_id = :ws AND sha256 = :sha"),
