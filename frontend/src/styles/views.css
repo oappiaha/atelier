@@ -412,6 +412,13 @@ textarea.field{min-height:84px;resize:none;}
 .gc-open{width:auto;height:auto;padding:8px 12px;font-family:'DM Mono';
   font-size:8.5px;letter-spacing:.1em;flex-shrink:0;}
 .gc-open.latched{background:var(--ink);color:#FFF;border-color:var(--ink);}
+/* choose-your-cover key: floats on the hero, latched when showing the cover */
+.hero-cover{position:absolute;right:12px;bottom:12px;z-index:3;font-size:8.5px;letter-spacing:.12em;
+  padding:7px 11px;border-radius:999px;color:#FFF;background:rgba(18,14,10,.42);
+  border:1px solid rgba(255,255,255,.28);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}
+.hero-cover.on{background:rgba(255,255,255,.92);color:var(--ink);border-color:transparent;}
+.hero-cover:disabled{cursor:default;opacity:.9;}
+
 /* wrapper that carries the floating delete key: must behave exactly like the
    card as a grid item — stretch the card to the row height or rows go ragged */
 .sg-wrap{position:relative;display:flex;min-width:0;}

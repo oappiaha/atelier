@@ -327,26 +327,28 @@ export default function Studio() {
             <div className="mono" id="study-status" style={{ fontSize: 9, letterSpacing: '.12em', color: 'var(--fog)' }}>
               {study.data ? `${study.data.status.toUpperCase()} · #${study.data.palette_id} · ${palette?.name ?? '…'}` : 'LOADING…'}
             </div>
-            <button
-              className="kbtn gc-open press"
-              id="study-hub-link"
-              style={{ width: 'auto', padding: '0 12px' }}
-              title="All studies for this product"
-              onClick={() => navigate(`/d/${designId}/studio`)}
-            >
-              ⊞ ALL STUDIES
-            </button>
-            {frozen && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
               <button
-                className="kbtn gc-open press dup-btn"
-                id="study-duplicate"
-                disabled={duplicateM.isPending}
-                title="Fork this study into a fresh draft — slots, locks, anchors and palette carried over"
-                onClick={() => duplicateM.mutate()}
+                className="kbtn gc-open press"
+                id="study-hub-link"
+                style={{ width: 'auto' }}
+                title="All studies for this product"
+                onClick={() => navigate(`/d/${designId}/studio`)}
               >
-                {duplicateM.isPending ? '…' : '⧉ NEW STUDY'}
+                ⊞ ALL STUDIES
               </button>
-            )}
+              {frozen && (
+                <button
+                  className="kbtn gc-open press dup-btn"
+                  id="study-duplicate"
+                  disabled={duplicateM.isPending}
+                  title="Fork this study into a fresh draft — slots, locks, anchors and palette carried over"
+                  onClick={() => duplicateM.mutate()}
+                >
+                  {duplicateM.isPending ? '…' : '⧉ NEW STUDY'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 

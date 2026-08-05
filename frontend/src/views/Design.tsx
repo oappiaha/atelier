@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   api,
   PHASES, PHASE_LABELS, STATUS_CLASS, STATUS_LABELS,
@@ -179,6 +179,7 @@ function MTile({
 export default function Design() {
   const { designId } = useParams<{ designId: string }>()
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const setDesignCtx = useCapture(s => s.setDesignCtx)
   const openShare = useShare(s => s.openShare)
 
@@ -211,15 +212,38 @@ export default function Design() {
     return () => setDesignCtx(null)
   }, [design.data, setDesignCtx])
 
-  const images = useMemo(
-    () => (media.data ?? []).filter(m => m.kind === 'image'),
-    [media.data],
-  )
+  // hero rail: the CHOSEN cover leads, real photos before wada colorway
+  // media (explorations shouldn't hijack the product's face — Beezy
+  // 2026-08-04: "I'd rather choose which covers to pin"). Stable within
+  // each tier, so recency still orders the rest.
+  const coverId = design.data?.cover_media_id
+  const images = useMemo(() => {
+    const imgs = (media.data ?? []).filter(m => m.kind === 'image')
+    const tier = (m: Media) =>
+      m.id === coverId ? 0 : m.source_app === 'wada' ? 2 : 1
+    return imgs
+      .map((m, i) => ({ m, i }))
+      .sort((a, b) => tier(a.m) - tier(b.m) || a.i - b.i)
+      .map(x => x.m)
+  }, [media.data, coverId])
   const heroImages = images.slice(0, 8)
-  const heroSrc = heroImages[Math.min(heroIdx, Math.max(heroImages.length - 1, 0))]?.url
-    ?? design.data?.cover_url
-    ?? null
+  const heroShown = heroImages[Math.min(heroIdx, Math.max(heroImages.length - 1, 0))] ?? null
+  const heroSrc = heroShown?.url ?? design.data?.cover_url ?? null
   const hero = useCrossfade(heroSrc)
+
+  const coverM = useMutation({
+    mutationFn: (mediaId: string) =>
+      api<DesignT>(`/designs/${designId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ cover_media_id: mediaId }),
+      }),
+    onSuccess: () => {
+      toast('Cover set')
+      qc.invalidateQueries({ queryKey: ['design', designId] })
+      qc.invalidateQueries({ queryKey: ['designs'] })
+    },
+    onError: () => toast('Could not set the cover'),
+  })
 
   // phases present in the archive, canonical order
   const presentPhases = useMemo(() => {
@@ -301,6 +325,17 @@ export default function Design() {
                   style={hero.b ? { backgroundImage: `url(${JSON.stringify(hero.b)})` } : undefined}
                 />
                 <div className="hero-sheen" />
+                {heroShown && (
+                  <button
+                    className={`hero-cover mono press${heroShown.id === coverId ? ' on' : ''}`}
+                    id="hero-set-cover"
+                    disabled={coverM.isPending || heroShown.id === coverId}
+                    title="Use this image as the design's cover"
+                    onClick={() => coverM.mutate(heroShown.id)}
+                  >
+                    {heroShown.id === coverId ? '★ COVER' : '☆ SET AS COVER'}
+                  </button>
+                )}
               </div>
             </div>
             <div className="rail" id="hero-rail">
