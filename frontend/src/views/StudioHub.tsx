@@ -7,6 +7,7 @@
 // resume. Draft cards carry a delete key (drafts are free; anything
 // generated is a spend record and the API 409s).
 import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -44,36 +45,31 @@ export default function StudioHub() {
   )
 
   const [opening, setOpening] = useState(false)
+  const [picking, setPicking] = useState(false)
   const openStudy = (s: StudyGalleryItem) => navigate(`/d/${designId}/study/${s.id}`)
 
-  /** NEW STUDY: resume the newest empty draft, else segment + create. */
-  const newStudy = async () => {
+  // photos are real study bases; wada/photoroom derivatives are outputs, not
+  // inputs (a shadowed studio shot would poison the cutout silhouette)
+  const photos = useMemo(
+    () => (media.data ?? []).filter(m => m.kind === 'image' && m.source_app !== 'wada' && m.source_app !== 'photoroom'),
+    [media.data],
+  )
+
+  /** Create a draft on a CHOSEN base photo — segments it first if needed. */
+  const startOn = async (base: Media) => {
     if (!designId || opening) return
-    if (emptyDraft) {
-      toast('Resuming your open draft')
-      rememberStudy(designId, emptyDraft.id)
-      navigate(`/d/${designId}/study/${emptyDraft.id}`)
-      return
-    }
+    setPicking(false)
     setOpening(true)
     try {
-      const imgs = (media.data ?? []).filter(m => m.kind === 'image')
-      if (!imgs.length) {
-        toast('Add a product photo first')
-        return
-      }
-      let base: Media | null = null
-      for (const m of imgs) {
-        if ((await fetchRegions(m.id)).length) { base = m; break }
-      }
-      if (!base) {
+      if (!(await fetchRegions(base.id)).length) {
         toast('Finding regions…')
+        let ok = false
         for (let i = 0; i < 20; i++) {
-          const out = await segmentMedia(imgs[0].id)
-          if (out.status === 'complete' && out.regions.length) { base = imgs[0]; break }
+          const out = await segmentMedia(base.id)
+          if (out.status === 'complete' && out.regions.length) { ok = true; break }
           await new Promise(r => setTimeout(r, 3000))
         }
-        if (!base) {
+        if (!ok) {
           toast('Segmentation is still running — try again in a minute')
           return
         }
@@ -89,6 +85,24 @@ export default function StudioHub() {
     } finally {
       setOpening(false)
     }
+  }
+
+  /** NEW STUDY: resume the newest empty draft; else pick a base photo
+   *  (multi-photo designs) or go straight in (single photo). */
+  const newStudy = () => {
+    if (!designId || opening) return
+    if (emptyDraft) {
+      toast('Resuming your open draft')
+      rememberStudy(designId, emptyDraft.id)
+      navigate(`/d/${designId}/study/${emptyDraft.id}`)
+      return
+    }
+    if (!photos.length) {
+      toast('Add a product photo first')
+      return
+    }
+    if (photos.length === 1) void startOn(photos[0])
+    else setPicking(true)
   }
 
   const deleteM = useMutation({
@@ -187,6 +201,37 @@ export default function StudioHub() {
           </>
         )}
       </div>
+
+      {/* base-photo picker: which photo does the new study paint on? Portaled
+          to <body> — never trust a fixed overlay inside .rise ancestors. */}
+      {picking && createPortal(
+        <div className="cwlb" id="base-picker" onClick={() => setPicking(false)}>
+          <div className="cwlb-body pald-body" onClick={e => e.stopPropagation()}>
+            <button className="cwlb-close press" aria-label="Close" onClick={() => setPicking(false)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+            <div style={{ padding: '20px 18px' }}>
+              <div className="eyebrow" style={{ marginBottom: 2 }}>NEW STUDY</div>
+              <div className="syne" style={{ fontSize: 19, fontWeight: 800 }}>Which photo?</div>
+              <p style={{ fontSize: 12, color: 'var(--fog)', margin: '6px 0 12px', lineHeight: 1.6 }}>
+                The study paints on this photo — regions, slots and colorways
+                all live in its frame.
+              </p>
+              <div className="base-pick-grid">
+                {photos.map(m => (
+                  <button key={m.id} className="base-pick press" onClick={() => startOn(m)}>
+                    <img src={m.thumb_url ?? m.url} alt="" loading="lazy" />
+                    {m.phase && <span className="mono">{m.phase.toUpperCase()}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

@@ -8,11 +8,18 @@ export default function Lightbox({
   index,
   phaseLabel,
   onClose,
+  onStudioShot,
+  studioShotBusy,
 }: {
   items: Media[]
   index: number
   phaseLabel: string
   onClose: () => void
+  /** When provided, images offer "STUDIO SHOT" — PhotoRoom presentation
+   *  derivative (bg removed + soft shadow), ~$0.02. Hidden on media that IS
+   *  already a photoroom derivative. */
+  onStudioShot?: (m: Media) => void
+  studioShotBusy?: boolean
 }) {
   const [idx, setIdx] = useState(Math.min(index, items.length - 1))
 
@@ -78,6 +85,17 @@ export default function Lightbox({
         <div className="mono" style={{ fontSize: 9.5, color: 'rgba(255,255,255,.42)', marginTop: 8 }}>
           <span id="lb-idx">{idx + 1}</span> / <span id="lb-total">{items.length}</span> · swipe or tap edges
         </div>
+        {onStudioShot && cur.kind === 'image' && cur.source_app !== 'photoroom' && (
+          <button
+            className="lb-studio mono press"
+            id="lb-studio-shot"
+            disabled={studioShotBusy}
+            title="PhotoRoom: background removed + AI soft shadow, saved to the timeline (~$0.02)"
+            onClick={() => onStudioShot(cur)}
+          >
+            {studioShotBusy ? 'SHOOTING…' : '◐ STUDIO SHOT · ~$0.02'}
+          </button>
+        )}
       </div>
     </div>
   )

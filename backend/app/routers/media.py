@@ -252,3 +252,130 @@ async def triage(
     ).one()
     await session.commit()
     return _media_out(row)
+
+
+# ── Studio Shot (2026-08-04, Beezy): PRESENTATION derivative on demand ───────
+# Background removed + AI soft shadow + white backdrop via PhotoRoom's edit
+# API. Registered as real archive media on an editorial entry, so it can be
+# pinned as cover, shared, exported. Distinct from the Wada pipeline cutout
+# (clean alpha, no styling) — that one stays automatic and untouched.
+
+class StudioShotOut(BaseModel):
+    entry_id: uuid.UUID
+    media: MediaOut
+    created: bool  # False = these exact bytes were already in the archive
+
+
+def _studio_shot_bytes(key: str) -> tuple[bytes, str, int, int]:
+    """Original bytes → PhotoRoom studio edit → (png, sha, w, h). Sync: runs
+    in the threadpool; PhotoRoom latency is seconds, bounded by its timeout."""
+    import hashlib
+    import io
+
+    from PIL import Image
+
+    from app.config import get_settings
+    from app.storage import get_s3
+    from app.workers.cutout import call_photoroom_studio
+
+    s3 = get_s3()
+    original = s3.get_object(Bucket=get_settings().s3_bucket, Key=key)["Body"].read()
+    png = call_photoroom_studio(original)
+    sha = hashlib.sha256(png).hexdigest()
+    with Image.open(io.BytesIO(png)) as img:
+        width, height = img.size
+    return png, sha, width, height
+
+
+def _put_object(key: str, png: bytes) -> None:
+    from app.config import get_settings
+    from app.storage import get_s3
+
+    get_s3().put_object(
+        Bucket=get_settings().s3_bucket, Key=key, Body=png, ContentType="image/png",
+    )
+
+
+@router.post("/media/{media_id}/studio-shot", response_model=StudioShotOut, status_code=201)
+async def studio_shot(
+    media_id: uuid.UUID,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> StudioShotOut:
+    import httpx as _httpx
+    from starlette.concurrency import run_in_threadpool
+
+    from app.config import get_settings
+
+    if not get_settings().photoroom_api_key:
+        raise HTTPException(503, "PhotoRoom is not configured")
+    src = (
+        await session.execute(
+            text(
+                "SELECT id, design_id, kind, r2_key FROM media "
+                "WHERE id = :id AND workspace_id = :ws"
+            ),
+            {"id": str(media_id), "ws": str(ctx.workspace_id)},
+        )
+    ).one_or_none()
+    if src is None:
+        raise HTTPException(404, "media not found")
+    if src.kind != "image":
+        raise HTTPException(422, "studio shot needs an image")
+    if src.design_id is None:
+        raise HTTPException(422, "triage this photo to a design first")
+
+    try:
+        png, sha, width, height = await run_in_threadpool(_studio_shot_bytes, src.r2_key)
+    except _httpx.HTTPError as e:
+        raise HTTPException(502, f"PhotoRoom edit failed: {e}") from e
+
+    ws = str(ctx.workspace_id)
+    existing = (
+        await session.execute(
+            text("SELECT * FROM media WHERE workspace_id = :ws AND sha256 = :sha"),
+            {"ws": ws, "sha": sha},
+        )
+    ).one_or_none()
+    if existing is not None and existing.entry_id is not None:
+        # identical bytes already live on an entry — the studio shot exists
+        return StudioShotOut(entry_id=existing.entry_id, media=_media_out(existing), created=False)
+
+    entry = (
+        await session.execute(
+            text(
+                "INSERT INTO entries (workspace_id, design_id, phase, body) "
+                "VALUES (:ws, :did, 'editorial', :body) RETURNING id"
+            ),
+            {"ws": ws, "did": str(src.design_id),
+             "body": "Studio shot — background removed, soft shadow"},
+        )
+    ).one()
+    if existing is not None:  # orphaned bytes — attach
+        row = (
+            await session.execute(
+                text("UPDATE media SET entry_id = :eid WHERE id = :id RETURNING *"),
+                {"eid": str(entry.id), "id": str(existing.id)},
+            )
+        ).one()
+    else:
+        media_key = f"src/{ws}/{sha}.png"
+        await run_in_threadpool(_put_object, media_key, png)
+        row = (
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO media (workspace_id, entry_id, kind, r2_key, sha256,
+                                       width, height, source_url, source_app)
+                    VALUES (:ws, :eid, 'image', :key, :sha, :w, :h, :src_url, 'photoroom')
+                    RETURNING *
+                    """
+                ),
+                {"ws": ws, "eid": str(entry.id), "key": media_key, "sha": sha,
+                 "w": width, "h": height, "src_url": f"media:{media_id}"},
+            )
+        ).one()
+    await session.commit()
+    if row.thumb_key is None:
+        enqueue_thumbs(str(row.id))
+    return StudioShotOut(entry_id=entry.id, media=_media_out(row), created=True)

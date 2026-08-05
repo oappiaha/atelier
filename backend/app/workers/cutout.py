@@ -35,6 +35,7 @@ from app.workers.celery_app import celery_app
 logger = logging.getLogger(__name__)
 
 PHOTOROOM_URL = "https://sdk.photoroom.com/v1/segment"
+PHOTOROOM_EDIT_URL = "https://image-api.photoroom.com/v2/edit"
 PHOTOROOM_TIMEOUT = 60.0
 
 
@@ -64,6 +65,36 @@ def call_photoroom(image_bytes: bytes) -> bytes:
     resp.raise_for_status()
     logger.info(
         "MODEL-CALL photoroom remove-bg sandbox=%s latency=%.2fs bytes_in=%d bytes_out=%d",
+        settings.photoroom_sandbox, time.time() - t0, len(image_bytes), len(resp.content),
+    )
+    return resp.content
+
+
+def call_photoroom_studio(image_bytes: bytes) -> bytes:
+    """ONE "studio shot" edit (the HTTP boundary tests mock): background
+    removed, AI soft shadow, clean white backdrop, a little breathing room.
+    PRESENTATION-only — never feed this to Wada: the baked backdrop/shadow
+    would poison the alpha silhouette the coverage math relies on."""
+    settings = get_settings()
+    key = settings.photoroom_api_key or ""
+    if settings.photoroom_sandbox and not key.startswith("sandbox_"):
+        key = f"sandbox_{key}"
+    t0 = time.time()
+    resp = httpx.post(
+        PHOTOROOM_EDIT_URL,
+        headers={"x-api-key": key},
+        files={"imageFile": ("image", image_bytes)},
+        data={
+            "background.color": "FFFFFF",
+            "shadow.mode": "ai.soft",
+            "padding": "0.1",
+            "export.format": "png",
+        },
+        timeout=PHOTOROOM_TIMEOUT,
+    )
+    resp.raise_for_status()
+    logger.info(
+        "MODEL-CALL photoroom studio-shot sandbox=%s latency=%.2fs bytes_in=%d bytes_out=%d",
         settings.photoroom_sandbox, time.time() - t0, len(image_bytes), len(resp.content),
     )
     return resp.content

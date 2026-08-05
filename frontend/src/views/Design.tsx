@@ -231,6 +231,21 @@ export default function Design() {
   const heroSrc = heroShown?.url ?? design.data?.cover_url ?? null
   const hero = useCrossfade(heroSrc)
 
+  // Studio Shot: PhotoRoom presentation derivative → editorial timeline entry
+  const studioShotM = useMutation({
+    mutationFn: (mediaId: string) =>
+      api<{ created: boolean }>(`/media/${mediaId}/studio-shot`, { method: 'POST' }),
+    onSuccess: out => {
+      toast(out.created
+        ? 'Studio shot saved to the timeline'
+        : 'Already shot — it’s on the timeline')
+      qc.invalidateQueries({ queryKey: ['timeline', designId] })
+      qc.invalidateQueries({ queryKey: ['media', designId] })
+      qc.invalidateQueries({ queryKey: ['design', designId] })
+    },
+    onError: () => toast('Studio shot failed — PhotoRoom may be unavailable'),
+  })
+
   const coverM = useMutation({
     mutationFn: (mediaId: string) =>
       api<DesignT>(`/designs/${designId}`, {
@@ -462,6 +477,8 @@ export default function Design() {
           index={lb.index}
           phaseLabel={lb.phaseLabel}
           onClose={() => setLb(null)}
+          onStudioShot={m => studioShotM.mutate(m.id)}
+          studioShotBusy={studioShotM.isPending}
         />
       )}
     </div>
