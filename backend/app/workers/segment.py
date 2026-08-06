@@ -126,6 +126,7 @@ def _segment(media_id: str, settings) -> str:
                 alpha is not None)
 
     regions = None
+    subject = None
     last_err: ValueError | None = None
     for attempt in range(1 + SEG_PARSE_RETRIES):
         # category-aware part vocabulary (v3): slippers get footwear anatomy,
@@ -141,7 +142,7 @@ def _segment(media_id: str, settings) -> str:
             attempt + 1,
         )
         try:  # json.JSONDecodeError is a ValueError subclass
-            regions = segmentation.parse_regions(raw_text)
+            subject, regions = segmentation.parse_response(raw_text)
             break
         except ValueError as e:
             last_err = e
@@ -233,5 +234,11 @@ def _segment(media_id: str, settings) -> str:
                     p["mask_sha256"], p["area_fraction"], p["bbox"], p["mean_lab"],
                 ),
             )
+        # what the model saw (v4): drives the compositor's residual-fill
+        # decision — single-product always fills; on-model/collage never does
+        conn.execute(
+            "UPDATE media SET seg_subject = %s WHERE id = %s",
+            (subject, media_id),
+        )
         conn.commit()
     return f"segmented:{len(prepared)}"

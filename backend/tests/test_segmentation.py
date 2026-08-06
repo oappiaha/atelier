@@ -400,3 +400,32 @@ def test_dedupe_labels_suffixes_symmetric_pairs():
     ]
     assert dedupe_labels([]) == []
     assert dedupe_labels(["body"]) == ["body"]
+
+
+def test_parse_response_subject_and_shapes():
+    from app.wada import segmentation
+
+    obj = json.dumps({
+        "subject": "worn-on-model",
+        "regions": [{"box_2d": [0, 0, 900, 900],
+                     "mask": [[0, 0], [0, 900], [900, 900]],
+                     "label": "bodice", "confidence": 0.9}],
+    })
+    subject, regions = segmentation.parse_response(obj)
+    assert subject == "worn-on-model" and [r.label for r in regions] == ["bodice"]
+
+    # legacy bare list → no subject
+    subject, regions = segmentation.parse_response("```json\n" + RAW + "\n```")
+    assert subject is None and len(regions) == 3
+
+    # unknown subject values are ignored, not propagated
+    weird = json.dumps({"subject": "spaceship", "regions": []})
+    assert segmentation.parse_response(weird) == (None, [])
+
+    # malformed box_2d derives from the polygon instead of crashing
+    bad = json.dumps({"subject": "single-product", "regions": [
+        {"box_2d": [100, 100], "mask": [[10, 10], [10, 500], [500, 500]],
+         "label": "body", "confidence": 0.9}]})
+    subject, regions = segmentation.parse_response(bad)
+    assert subject == "single-product"
+    assert regions[0].box_2d == [10, 10, 500, 500]

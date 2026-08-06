@@ -72,9 +72,12 @@ def seg_prompt(category: str | None = None) -> str:
         "vs mesh vs rubber vs metal) even when the whole product is a single colour. "
         "Give every region a DISTINCT, specific label — never repeat a label. "
         "At most 8 regions, no background.\n"
-        'Output a JSON list of segmentation masks where each entry contains the 2D '
-        'bounding box in the key "box_2d" ([ymin, xmin, ymax, xmax] normalized to '
-        '0-1000), the segmentation mask in the key "mask" as a polygon of [x, y] '
+        'Output a JSON object with two keys. "subject": one of "single-product" '
+        '(one product photographed alone), "worn-on-model" (a person is wearing '
+        'it), or "multiple-items" (a collage or several products). "regions": a '
+        "list of segmentation masks where each entry contains the 2D bounding "
+        'box in the key "box_2d" ([ymin, xmin, ymax, xmax] normalized to 0-1000), '
+        'the segmentation mask in the key "mask" as a polygon of [x, y] '
         "coordinates normalized to 0-1000, the text label in the key \"label\", and "
         'your labeling confidence 0.0-1.0 in the key "confidence".'
     )
@@ -176,13 +179,26 @@ def call_gemini(image: Image.Image, api_key: str, prompt: str | None = None) -> 
     return resp.text or "", meta
 
 
-def parse_regions(raw_text: str) -> list[RawRegion]:
-    """Parse the model's JSON (possibly fenced) into RawRegions."""
-    m = re.search(r"\[.*\]", raw_text, re.DOTALL)
+SUBJECTS = ("single-product", "worn-on-model", "multiple-items")
+
+
+def parse_response(raw_text: str) -> tuple[str | None, list[RawRegion]]:
+    """Parse the model's JSON (v4 object with subject, or legacy bare list —
+    possibly fenced) into (subject, RawRegions)."""
+    m = re.search(r"[\[{].*[\]}]", raw_text, re.DOTALL)
     if m is None:
-        raise ValueError(f"no JSON array in segmentation response: {raw_text[:200]!r}")
+        raise ValueError(f"no JSON in segmentation response: {raw_text[:200]!r}")
+    data = json.loads(m.group(0))
+    subject = None
+    if isinstance(data, dict):
+        subject = data.get("subject")
+        if subject not in SUBJECTS:
+            subject = None
+        data = data.get("regions", [])
+    if not isinstance(data, list):
+        raise ValueError("segmentation response has no regions list")  # noqa: TRY004 — parse errors are ValueErrors (retry contract)
     out: list[RawRegion] = []
-    for entry in json.loads(m.group(0)):
+    for entry in data:
         poly = entry.get("mask")
         if not isinstance(poly, list) or len(poly) < 3:
             continue  # a region without a usable polygon can't become a mask
@@ -203,7 +219,12 @@ def parse_regions(raw_text: str) -> list[RawRegion]:
                 polygon=poly,
             )
         )
-    return out
+    return subject, out
+
+
+def parse_regions(raw_text: str) -> list[RawRegion]:
+    """Back-compat: regions only."""
+    return parse_response(raw_text)[1]
 
 
 def box_area_fraction(box_2d: list[int]) -> float:

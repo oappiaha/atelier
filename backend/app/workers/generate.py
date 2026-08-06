@@ -603,12 +603,12 @@ def _prepare(study_id: str, colorway_id: str) -> dict | str:
             min_conf[idx] = float(mc) if mc is not None else 1.0
 
         media = conn.execute(
-            "SELECT r2_key, sha256 FROM media WHERE id = %s", (media_id,)
+            "SELECT r2_key, sha256, seg_subject FROM media WHERE id = %s", (media_id,)
         ).fetchone()
         if media is None:
             _fail_colorway(conn, colorway_id, "study base media is missing")
             return "skipped:missing-media"
-        r2_key, media_sha = media
+        r2_key, media_sha, seg_subject = media
 
     # ── working base: the CUTOUT is the Wada contract; original is fallback ──
     cutout_key = cutout.ensure_cutout(str(media_id))
@@ -660,17 +660,20 @@ def _prepare(study_id: str, colorway_id: str) -> dict | str:
                 )
             cover_in[(1, j)] = arr
         covered, cov = coverage.cover_silhouette(alpha, cover_in)
-        # GUARD (eval 2026-08-06): on-model / collage photos have silhouettes
-        # far larger than the garment (person's skin+hair are "product" to the
-        # cutout). Growing slots into a residual that big would recolor the
-        # model, not the piece — so above 30% residual, leave masks untouched
-        # and let the composite keep the original pixels there.
+        # GUARD v2 (2026-08-06): the model reports what it SAW (media.seg_subject).
+        # single-product → the whole silhouette IS the garment: always fill.
+        # worn-on-model / multiple-items → never fill (skin/other items must
+        # not be recolored). Legacy scans (NULL) keep the 30%-residual rule.
         residual_frac = cov.residual_px / max(int(alpha.sum()), 1)
-        if residual_frac > 0.30:
+        skip_fill = (
+            seg_subject in ("worn-on-model", "multiple-items")
+            or (seg_subject is None and residual_frac > 0.30)
+        )
+        if skip_fill and cov.residual_px:
             logger.warning(
-                "study=%s residual %.0f%% of silhouette — likely on-model/collage "
-                "base; skipping coverage growth (regions only, no fill-in)",
-                study_id, residual_frac * 100,
+                "study=%s residual %.0f%% + subject=%s — skipping coverage "
+                "growth (regions only, no fill-in)",
+                study_id, residual_frac * 100, seg_subject,
             )
             cov = cov.__class__(residual_px=0, n_components=0,
                                 added_px={k: 0 for k in cov.added_px})
