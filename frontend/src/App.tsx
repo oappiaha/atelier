@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, ScrollRestoration, useLocation, useNavigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { getToken } from './lib/api'
 import { useCapture } from './lib/store'
@@ -67,6 +67,9 @@ export default function App() {
 
       <main className="main">
         <Outlet />
+        {/* back/forward restores the scroll position (the 102-design grid
+            was snapping to the top on every return); new pushes start at top */}
+        <ScrollRestoration />
       </main>
 
       <nav className="tabbar">
