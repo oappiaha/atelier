@@ -1,4 +1,4 @@
-"""One-time Obsidian -> Atelier importer.
+"""One-time Obsidian -> Atelier importer (reworked for the REORGANIZED vault).
 
 Usage (from backend/):
 
@@ -12,25 +12,49 @@ Dry run needs NO network and performs NO API calls: it walks the vault, plans
 the whole import in memory (pure planning — see scan_vault/render_report), and
 writes a human-readable report to stdout and to a markdown file.
 
-Mapping (agreed with Beezy):
-- <designs root>/<CATEGORY>/            -> Atelier PROJECT (title-cased name)
-- <CATEGORY>/<Design Folder>/           -> DESIGN (all .canvas/.md inside, recursively)
-- <CATEGORY>/<bare>.canvas|.md          -> DESIGN of its own (name = file stem)
-- each .canvas -> ONE moodboard entry: image nodes attached as media in node
-  order, text nodes concatenated into the body (link-node URLs appended),
-  prefixed with the canvas name when the design has more than one canvas
-- each .md     -> a 'note' entry; body = content minus Obsidian frontmatter;
-  ![[...]] image embeds are attached as media
-- names matching UNSURE_PATTERNS are classified UNSURE and imported as nothing
+Mapping (Beezy's convention, 2026-08: "a design belongs in a folder that
+exists on a canvas — infer the design name from the direct parent folder of
+the canvas, or the name of the canvas file itself"):
+
+- EVERYTHING imports into the ONE existing project "rei by Rei" (PROJECT_NAME).
+  Design names are therefore unique per project — collisions get the category
+  suffixed in parens and are flagged. The category (title-cased) is recorded
+  per design in the plan (a future `category` field will consume it).
+- Each top-level folder under Designs is a CATEGORY. At any depth below:
+  1. UNSURE_PATTERNS names (checked at every level) are listed and skipped
+     whole — nothing inside them is imported.
+  2. A folder whose DIRECT children include >=1 .canvas and NO subfolders is a
+     DESIGN named after the folder (provenance 'folder'). Its direct canvases
+     each become one moodboard entry (body prefixed with the canvas name when
+     the design ends up with more than one canvas); its direct .md files
+     become note entries. Subfolders are never recursively merged.
+  3. A folder with NO direct canvases but WITH subfolders is a GROUPING, not a
+     design: we recurse into its subfolders.
+  4. A MIXED folder (direct canvases AND subfolders): subfolders classify per
+     2/3; the folder's own direct canvases are conservatively fuzzy-matched
+     (see fuzzy_match) against the sibling subfolder names — a canvas matching
+     exactly one subfolder is ASSIGNED into that subfolder's design; unmatched
+     or ambiguous canvases are NOT imported and go to the report's
+     "QUESTIONS — need your call" section with the candidates considered.
+  5. A bare .canvas directly at CATEGORY level fuzzy-matches against that
+     category's design folders first; if uniquely matched it is assigned into
+     that folder's design, else it IS a design named after the canvas stem
+     (provenance 'canvas name'). Ambiguous matches go to QUESTIONS.
+  6. A bare .md at category/grouping/mixed level not caught by the skip-list
+     goes to QUESTIONS (not imported by default). Blank files are skipped.
+  7. A folder with no canvas and no subfolder is still created as a design
+     SHELL (Beezy makes placeholder folders deliberately) and flagged
+     "empty design shell" — EXCEPT names normalizing to "untitled", which are
+     skipped and listed (as are untitled bare canvases at container level).
 
 Dates: image filename timestamp (Pasted image YYYYMMDDHHMMSS) beats the
 _attachments/YYYY-MM bucket (day=01) beats file mtime. An entry's occurred_at
 is the earliest date among its attached images, else the note file's
 frontmatter date, else its mtime.
 
-Idempotency of --write: projects/designs are matched by name; every imported
-entry body ends with a visible marker line (entry_marker) that re-runs detect
-via the timeline; media dedupes on sha256 inside the API itself.
+Idempotency of --write: the project/designs are matched by name; every
+imported entry body ends with a visible marker line (entry_marker) that
+re-runs detect via the timeline; media dedupes on sha256 inside the API.
 """
 
 from __future__ import annotations
@@ -46,8 +70,28 @@ from pathlib import Path
 
 # ── visible constants (the contract) ────────────────────────────────────────
 
+#: The single project every design imports into (Beezy 2026-08-03).
+PROJECT_NAME = "rei by Rei"
+
 #: Case-insensitive substring patterns marking a folder/file as NOT a design.
 UNSURE_PATTERNS = ("research", "inspo", "concept", "official seasons", "ideas")
+
+# Beezy's rulings on the dry-run v2 QUESTIONS (2026-08-05), keyed by
+# vault-relative path. 'ignore' = leave in the vault; 'design' = the loose
+# canvas becomes its own design in its category. Loose notes are ignored
+# ("ignore the category level notes"); medium bow + mini bow bag are
+# superseded by their named subfolders.
+RESOLVED: dict[str, str] = {
+    "rei by Rei/Designs/BAGS/BOW BOWLING BAG/medium bow.canvas": "ignore",
+    "rei by Rei/Designs/BAGS/BOW BOWLING BAG/mini bow bag.canvas": "ignore",
+    "rei by Rei/Designs/BAGS/BOW BOWLING BAG/Marketing.md": "ignore",
+    "rei by Rei/Designs/BAGS/Trims.md": "ignore",
+    "rei by Rei/Designs/DRESSES/Legends.md": "ignore",
+    "rei by Rei/Designs/BAGS/rei's message/cotton bags.canvas": "design",
+    "rei by Rei/Designs/BAGS/SCRUNCHED/scrunched up paper.canvas": "design",
+    "rei by Rei/Designs/DRESSES/MERMAIDS/Mermaid Scales.canvas": "design",
+    "rei by Rei/Designs/DRESSES/MERMAIDS/The Dress.canvas": "design",
+}
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".heic"}
 HEIC_EXTS = {".heic"}
@@ -73,11 +117,72 @@ _FRONTMATTER_RE = re.compile(r"\A---\n(.*?)\n---\n?", re.DOTALL)
 _FM_DATE_RE = re.compile(r"^date:\s*['\"]?(\d{4}-\d{2}-\d{2})", re.MULTILINE)
 _MD_EMBED_RE = re.compile(r"!\[\[([^\]|#]+?)(?:\|[^\]]*)?\]\]")
 
+#: Possessive/brand tokens dropped by normalize_name ("Rei's Classic Biker"
+#: and "REI CLASSIC BIKER" both normalize to "classic biker").
+_BRAND_TOKENS = {"rei", "reis", "reii", "reiis"}
+_APOSTROPHES = "'’"
+
 
 def entry_marker(source_rel: str) -> str:
     """Deterministic, visible 'from Obsidian' marker appended to entry bodies.
     Doubles as the idempotency key for --write re-runs."""
     return f"[from Obsidian: {source_rel}]"
+
+
+# ── name normalization + conservative fuzzy matching (pure) ─────────────────
+
+def normalize_name(name: str) -> str:
+    """Lowercase, drop apostrophes, strip punctuation/emoji to spaces, drop
+    rei/rei's brand tokens, collapse whitespace."""
+    s = name.lower()
+    for ch in _APOSTROPHES:
+        s = s.replace(ch, "")
+    s = re.sub(r"[^a-z0-9]+", " ", s)
+    tokens = [t for t in s.split() if t not in _BRAND_TOKENS]
+    return " ".join(tokens)
+
+
+def is_untitled(name: str) -> bool:
+    """True for names that normalize to 'untitled' (digits allowed: 'Untitled 1')."""
+    tokens = [t for t in normalize_name(name).split() if not t.isdigit()]
+    return tokens == ["untitled"]
+
+
+def fuzzy_match(stem: str, candidates: list[str]) -> tuple[str | None, list[str]]:
+    """Conservative tiered match of a canvas stem against sibling folder names.
+
+    Tiers (highest wins): 3 = exact normalized equality; 2 = containment
+    (substring either way, or one token set a subset of the other);
+    1 = token overlap covering at least half of the combined tokens
+    (Jaccard >= 0.5). Returns (winner|None, matches at the best tier) —
+    a winner exists only when exactly ONE candidate sits at the best tier.
+    """
+    a = normalize_name(stem)
+    if not a:
+        return None, []
+    a_tok = set(a.split())
+    best_tier = 0
+    best: list[str] = []
+    for cand in candidates:
+        b = normalize_name(cand)
+        if not b:
+            continue
+        b_tok = set(b.split())
+        if a == b:
+            tier = 3
+        elif a in b or b in a or a_tok <= b_tok or b_tok <= a_tok:
+            tier = 2
+        elif len(a_tok & b_tok) / len(a_tok | b_tok) >= 0.5:
+            tier = 1
+        else:
+            continue
+        if tier > best_tier:
+            best_tier, best = tier, [cand]
+        elif tier == best_tier:
+            best.append(cand)
+    if len(best) == 1:
+        return best[0], best
+    return None, best
 
 
 # ── date inference (pure) ────────────────────────────────────────────────────
@@ -155,16 +260,51 @@ class PlannedEntry:
 
 @dataclass
 class PlannedDesign:
-    category: str
-    project_name: str
+    category: str            # title-cased, e.g. 'Fun Stuff' (future `category` field)
+    category_dir: str        # raw category folder name, e.g. 'FUN STUFF'
     name: str
     source_rel: str
+    provenance: str          # 'folder' | 'canvas name'
     entries: list[PlannedEntry] = field(default_factory=list)
+    assigned_sources: list[str] = field(default_factory=list)  # fuzzy-assigned canvases
 
     @property
     def date_span(self) -> tuple[datetime, datetime] | None:
         dts = [e.occurred_at for e in self.entries if e.occurred_at]
         return (min(dts), max(dts)) if dts else None
+
+
+@dataclass
+class _DesignSpec:
+    """Pre-materialization design: which files feed it (internal to scanning)."""
+    category: str            # raw category folder name
+    name: str
+    source_rel: str
+    provenance: str          # 'folder' | 'canvas name'
+    canvases: list[Path] = field(default_factory=list)
+    notes: list[Path] = field(default_factory=list)
+    assigned: list[Path] = field(default_factory=list)
+
+
+@dataclass
+class AssignedCanvas:
+    """A container-level canvas fuzzy-assigned into a sibling folder's design."""
+    source_rel: str
+    spec: _DesignSpec
+
+    @property
+    def design_name(self) -> str:
+        return self.spec.name
+
+
+@dataclass
+class Question:
+    """Something we deliberately did NOT import — needs Beezy's call."""
+    rel_path: str
+    kind: str                # 'canvas' | 'note'
+    reason: str
+    candidates: list[str] = field(default_factory=list)  # sibling folders considered
+    matches: list[str] = field(default_factory=list)     # tied candidates (ambiguous)
 
 
 @dataclass
@@ -181,17 +321,23 @@ class UnsureItem:
 class VaultPlan:
     vault: Path
     designs_root_rel: str
-    projects: dict[str, list[PlannedDesign]] = field(default_factory=dict)  # project -> designs
+    project_name: str = PROJECT_NAME
+    designs: list[PlannedDesign] = field(default_factory=list)
+    assigned: list[AssignedCanvas] = field(default_factory=list)
+    questions: list[Question] = field(default_factory=list)
+    resolved_ignored: list[str] = field(default_factory=list)  # Beezy's 'ignore' rulings
     unsure: list[UnsureItem] = field(default_factory=list)
+    skipped_untitled: list[str] = field(default_factory=list)
+    name_collisions: list[tuple[str, str]] = field(default_factory=list)  # (old, new)
     missing_files: list[tuple[str, str]] = field(default_factory=list)   # (source, ref)
     non_image_refs: list[tuple[str, str]] = field(default_factory=list)  # (source, ref)
     empty_sources: list[str] = field(default_factory=list)  # md/canvas with no content
-    stray_files: list[str] = field(default_factory=list)    # unexpected files at category level
+    stray_files: list[str] = field(default_factory=list)    # unexpected files
 
     # totals
     @property
     def all_entries(self) -> list[PlannedEntry]:
-        return [e for designs in self.projects.values() for d in designs for e in d.entries]
+        return [e for d in self.designs for e in d.entries]
 
     @property
     def heic_count(self) -> int:
@@ -244,7 +390,9 @@ def _count_unsure(vault: Path, item: Path, plan: VaultPlan) -> tuple[int, int, i
     return len(canvases), len(notes), image_refs
 
 
-def plan_canvas_entry(vault: Path, canvas: Path, plan: VaultPlan, name_prefix: str | None) -> PlannedEntry | None:
+def plan_canvas_entry(
+    vault: Path, canvas: Path, plan: VaultPlan, name_prefix: str | None
+) -> PlannedEntry | None:
     source_rel = str(canvas.relative_to(vault))
     try:
         data = _load_canvas(canvas)
@@ -326,7 +474,11 @@ def plan_note_entry(vault: Path, md: Path, plan: VaultPlan) -> PlannedEntry | No
             continue
         abs_path = vault / ref
         if not abs_path.is_file():  # embeds may be vault-relative or name-only
-            hits = sorted((vault / "_attachments").rglob(Path(ref).name)) if (vault / "_attachments").is_dir() else []
+            hits = (
+                sorted((vault / "_attachments").rglob(Path(ref).name))
+                if (vault / "_attachments").is_dir()
+                else []
+            )
             abs_path = hits[0] if hits else abs_path
         exists = abs_path.is_file()
         if not exists:
@@ -356,29 +508,209 @@ def plan_note_entry(vault: Path, md: Path, plan: VaultPlan) -> PlannedEntry | No
     return entry
 
 
-def plan_design(vault: Path, category: str, project_name: str, item: Path, plan: VaultPlan) -> PlannedDesign:
-    """A design folder (all canvases/notes inside, recursively) or a bare file."""
-    if item.is_dir():
-        name = item.name
-        canvases = sorted(item.rglob("*.canvas"))
-        notes = sorted(item.rglob("*.md"))
-    else:
-        name = item.stem
-        canvases = [item] if item.suffix == ".canvas" else []
-        notes = [item] if item.suffix == ".md" else []
+def _split_children(
+    vault: Path, category: str, folder: Path, plan: VaultPlan
+) -> tuple[list[Path], list[Path], list[Path]]:
+    """One directory level: record UNSURE/untitled-dir/stray/hidden items,
+    return the remaining (subdirs, canvases, mds)."""
+    subdirs: list[Path] = []
+    canvases: list[Path] = []
+    mds: list[Path] = []
+    for item in sorted(folder.iterdir(), key=lambda p: p.name.lower()):
+        if item.name.startswith("."):
+            continue
+        if item.is_file() and item.suffix.lower() not in (".canvas", ".md"):
+            plan.stray_files.append(str(item.relative_to(vault)))
+            continue
+        name = item.name if item.is_dir() else item.stem
+        matched = classify_unsure(name)
+        if matched:
+            n_canvases, n_notes, refs = _count_unsure(vault, item, plan)
+            plan.unsure.append(
+                UnsureItem(
+                    category=category,
+                    rel_path=str(item.relative_to(vault)),
+                    matched=matched,
+                    canvases=n_canvases,
+                    notes=n_notes,
+                    image_refs=refs,
+                )
+            )
+            continue
+        if item.is_dir():
+            if is_untitled(item.name):  # rule 7 exception: never a design/shell
+                plan.skipped_untitled.append(str(item.relative_to(vault)))
+                continue
+            subdirs.append(item)
+        elif item.suffix.lower() == ".canvas":
+            canvases.append(item)
+        else:
+            mds.append(item)
+    return subdirs, canvases, mds
 
-    design = PlannedDesign(
+
+def _classify_folder(
+    vault: Path, category: str, folder: Path, plan: VaultPlan
+) -> tuple[_DesignSpec | None, list[_DesignSpec]]:
+    """Classify one folder below category level.
+
+    Returns (folder_spec|None, all specs found inside). folder_spec is set only
+    when the folder itself IS a design (or shell) — the assignable targets for
+    sibling-canvas fuzzy matching. Groupings/mixed folders return None + their
+    nested designs.
+    """
+    subdirs, canvases, mds = _split_children(vault, category, folder, plan)
+    if subdirs:  # grouping (no direct canvases) or mixed (both) — never a design
+        specs = _resolve_container(
+            vault, category, subdirs, canvases, mds, plan, at_category_level=False
+        )
+        return None, specs
+    # design (>=1 direct canvas), notes-only design, or deliberate empty shell
+    spec = _DesignSpec(
         category=category,
-        project_name=project_name,
-        name=name,
-        source_rel=str(item.relative_to(vault)),
+        name=folder.name,
+        source_rel=str(folder.relative_to(vault)),
+        provenance="folder",
+        canvases=canvases,
+        notes=mds,
     )
-    multi = len(canvases) > 1
+    return spec, [spec]
+
+
+def _resolve_container(
+    vault: Path,
+    category: str,
+    subdirs: list[Path],
+    canvases: list[Path],
+    mds: list[Path],
+    plan: VaultPlan,
+    at_category_level: bool,
+) -> list[_DesignSpec]:
+    """Category / grouping / mixed folder: classify subfolders, then place the
+    folder's own direct canvases (fuzzy-assign, own design, or QUESTIONS) and
+    loose .md files (QUESTIONS)."""
+    specs: list[_DesignSpec] = []
+    folder_specs: dict[str, _DesignSpec] = {}
+    for sub in subdirs:
+        spec, sub_specs = _classify_folder(vault, category, sub, plan)
+        if spec is not None:
+            folder_specs[sub.name] = spec
+        specs.extend(sub_specs)
+
     for cv in canvases:
+        rel = str(cv.relative_to(vault))
+        if is_untitled(cv.stem):  # would otherwise become a design named 'Untitled'
+            plan.skipped_untitled.append(rel)
+            continue
+        ruling = RESOLVED.get(rel)
+        if ruling == "ignore":
+            plan.resolved_ignored.append(rel)
+            continue
+        if ruling == "design":
+            specs.append(
+                _DesignSpec(
+                    category=category,
+                    name=cv.stem,
+                    source_rel=rel,
+                    provenance="canvas name",
+                    canvases=[cv],
+                )
+            )
+            continue
+        target, matches = fuzzy_match(cv.stem, list(folder_specs))
+        if target is not None:
+            folder_specs[target].assigned.append(cv)
+            plan.assigned.append(AssignedCanvas(source_rel=rel, spec=folder_specs[target]))
+        elif len(matches) > 1:
+            plan.questions.append(
+                Question(
+                    rel_path=rel,
+                    kind="canvas",
+                    reason="ambiguous fuzzy match — matches more than one sibling folder",
+                    candidates=sorted(folder_specs),
+                    matches=matches,
+                )
+            )
+        elif at_category_level:  # rule 5: unmatched bare canvas IS a design
+            specs.append(
+                _DesignSpec(
+                    category=category,
+                    name=cv.stem,
+                    source_rel=rel,
+                    provenance="canvas name",
+                    canvases=[cv],
+                )
+            )
+        else:  # rule 4: unmatched canvas in a mixed folder — Beezy's call
+            plan.questions.append(
+                Question(
+                    rel_path=rel,
+                    kind="canvas",
+                    reason="no fuzzy match to a sibling design folder",
+                    candidates=sorted(folder_specs),
+                )
+            )
+
+    for md in mds:
+        rel = str(md.relative_to(vault))
+        try:
+            raw = md.read_text(encoding="utf-8")
+        except OSError as exc:
+            plan.missing_files.append((rel, f"unreadable md: {exc}"))
+            continue
+        body, _ = strip_frontmatter(raw)
+        if not body.strip():
+            plan.empty_sources.append(rel)
+            continue
+        if RESOLVED.get(rel) == "ignore":
+            plan.resolved_ignored.append(rel)
+            continue
+        where = "category level" if at_category_level else "a grouping/mixed folder"
+        plan.questions.append(
+            Question(
+                rel_path=rel,
+                kind="note",
+                reason=f"loose note at {where} — no design to attach it to",
+                candidates=sorted(folder_specs),
+            )
+        )
+    return specs
+
+
+def _dedupe_design_names(specs: list[_DesignSpec], plan: VaultPlan) -> None:
+    """Design names must be unique inside the single project: collisions get
+    the (title-cased) category suffixed and are flagged in the plan."""
+    seen: set[str] = set()
+    for spec in specs:
+        key = spec.name.strip().lower()
+        if key in seen:
+            new_name = f"{spec.name} ({spec.category.title()})"
+            n = 2
+            while new_name.lower() in seen:
+                new_name = f"{spec.name} ({spec.category.title()} {n})"
+                n += 1
+            plan.name_collisions.append((spec.name, new_name))
+            spec.name = new_name
+            key = new_name.lower()
+        seen.add(key)
+
+
+def _materialize_design(vault: Path, spec: _DesignSpec, plan: VaultPlan) -> PlannedDesign:
+    design = PlannedDesign(
+        category=spec.category.title(),
+        category_dir=spec.category,
+        name=spec.name,
+        source_rel=spec.source_rel,
+        provenance=spec.provenance,
+        assigned_sources=[str(cv.relative_to(vault)) for cv in spec.assigned],
+    )
+    all_canvases = [*spec.canvases, *spec.assigned]
+    multi = len(all_canvases) > 1
+    for cv in all_canvases:
         entry = plan_canvas_entry(vault, cv, plan, name_prefix=cv.stem if multi else None)
         if entry:
             design.entries.append(entry)
-    for md in notes:
+    for md in spec.notes:
         entry = plan_note_entry(vault, md, plan)
         if entry:
             design.entries.append(entry)
@@ -391,33 +723,18 @@ def scan_vault(vault: Path) -> VaultPlan:
     designs_root = find_designs_root(vault)
     plan = VaultPlan(vault=vault, designs_root_rel=str(designs_root.relative_to(vault)))
 
+    all_specs: list[_DesignSpec] = []
     for category_dir in sorted(p for p in designs_root.iterdir() if p.is_dir()):
         category = category_dir.name
-        project_name = category.title()
-        designs: list[PlannedDesign] = []
-        for item in sorted(category_dir.iterdir(), key=lambda p: p.name.lower()):
-            if item.name.startswith("."):
-                continue
-            if item.is_file() and item.suffix not in (".canvas", ".md"):
-                plan.stray_files.append(str(item.relative_to(vault)))
-                continue
-            name = item.name if item.is_dir() else item.stem
-            matched = classify_unsure(name)
-            if matched:
-                canvases, notes, refs = _count_unsure(vault, item, plan)
-                plan.unsure.append(
-                    UnsureItem(
-                        category=category,
-                        rel_path=str(item.relative_to(vault)),
-                        matched=matched,
-                        canvases=canvases,
-                        notes=notes,
-                        image_refs=refs,
-                    )
-                )
-                continue
-            designs.append(plan_design(vault, category, project_name, item, plan))
-        plan.projects[project_name] = designs
+        subdirs, canvases, mds = _split_children(vault, category, category_dir, plan)
+        all_specs.extend(
+            _resolve_container(
+                vault, category, subdirs, canvases, mds, plan, at_category_level=True
+            )
+        )
+    _dedupe_design_names(all_specs, plan)
+    for spec in all_specs:
+        plan.designs.append(_materialize_design(vault, spec, plan))
     return plan
 
 
@@ -433,7 +750,9 @@ def hash_images(plan: VaultPlan) -> None:
                 try:
                     cache[img.abs_path] = hashlib.sha256(img.abs_path.read_bytes()).hexdigest()
                 except OSError as exc:
-                    plan.missing_files.append((entry.source_rel, f"unreadable: {img.rel_path}: {exc}"))
+                    plan.missing_files.append(
+                        (entry.source_rel, f"unreadable: {img.rel_path}: {exc}")
+                    )
                     img.exists = False
                     continue
             img.sha256 = cache[img.abs_path]
@@ -455,31 +774,39 @@ def render_report(plan: VaultPlan, write_mode: bool = False) -> str:
     lines.append("")
     lines.append(f"- Vault: `{plan.vault}`")
     lines.append(f"- Designs root: `{plan.designs_root_rel}`")
+    lines.append(f"- Project: **{plan.project_name}** (everything imports into this ONE project)")
     lines.append(f"- UNSURE patterns: {', '.join(UNSURE_PATTERNS)}")
     lines.append("")
 
-    total_designs = total_entries = 0
+    total_entries = 0
     attach_total = 0
+    shells: list[PlannedDesign] = []
     shas: set[str] = set()
     unhashed_unique = 0
 
-    for project_name, designs in plan.projects.items():
-        category = designs[0].category if designs else project_name.upper()
-        lines.append(f"## {project_name}  (from `{category}/`)")
-        if not designs:
-            lines.append("- (no importable designs)")
+    by_category: dict[str, list[PlannedDesign]] = {}
+    for d in plan.designs:
+        by_category.setdefault(d.category, []).append(d)
+
+    for category, designs in by_category.items():
+        lines.append(f"## {category}  (from `{designs[0].category_dir}/`)")
         for d in designs:
-            canvases = sum(1 for e in d.entries if e.kind == "canvas")
-            notes = sum(1 for e in d.entries if e.kind == "note")
+            n_canvas = sum(1 for e in d.entries if e.kind == "canvas")
+            n_notes = sum(1 for e in d.entries if e.kind == "note")
             images = sum(len(e.images) for e in d.entries)
             ok_images = sum(1 for e in d.entries for i in e.images if i.exists)
             miss = f", {images - ok_images} missing" if ok_images != images else ""
-            shell = "  ⚠ empty design shell (sources had no content)" if not d.entries else ""
+            extra = ""
+            if d.assigned_sources:
+                extra = f" · +{len(d.assigned_sources)} canvas fuzzy-assigned in"
+            shell = ""
+            if not d.entries:
+                shells.append(d)
+                shell = "  ⚠ empty design shell"
             lines.append(
-                f"- **{d.name}** — {canvases} canvas, {notes} note, "
-                f"{ok_images} images{miss} · {_fmt_span(d.date_span)}{shell}"
+                f"- **{d.name}** ({d.provenance}) — {n_canvas} canvas, {n_notes} note, "
+                f"{ok_images} images{miss}{extra} · {_fmt_span(d.date_span)}{shell}"
             )
-            total_designs += 1
             total_entries += len(d.entries)
             for e in d.entries:
                 for i in e.images:
@@ -492,6 +819,34 @@ def render_report(plan: VaultPlan, write_mode: bool = False) -> str:
                         unhashed_unique += 1
         lines.append("")
 
+    lines.append("## Fuzzy-assigned canvases")
+    if plan.assigned:
+        for a in plan.assigned:
+            lines.append(f"- assigned: `{a.source_rel}` → design **{a.design_name}** (assigned into)")
+    else:
+        lines.append("- none")
+    lines.append("")
+
+    lines.append("## QUESTIONS — need your call")
+    if plan.questions:
+        lines.append("Nothing below is imported until you decide.")
+        for q in plan.questions:
+            cand = (
+                f"; candidates considered: {', '.join(q.candidates)}"
+                if q.candidates
+                else "; no sibling design folders to match against"
+            )
+            tied = f"; tied between: {', '.join(q.matches)}" if q.matches else ""
+            lines.append(f"- `{q.rel_path}` ({q.kind}) — {q.reason}{tied}{cand}")
+    else:
+        lines.append("- none")
+    lines.append("")
+
+    if plan.resolved_ignored:
+        lines.append("## Resolved by Beezy — ignored (2026-08-05 rulings)")
+        lines.extend(f"- `{p}`" for p in sorted(plan.resolved_ignored))
+        lines.append("")
+
     lines.append("## UNSURE — skipped, importing nothing (review by hand)")
     if plan.unsure:
         for u in plan.unsure:
@@ -499,6 +854,14 @@ def render_report(plan: VaultPlan, write_mode: bool = False) -> str:
                 f"- `{u.rel_path}` (matched '{u.matched}') — "
                 f"{u.canvases} canvas, {u.notes} md, {u.image_refs} image refs"
             )
+    else:
+        lines.append("- none")
+    lines.append("")
+
+    lines.append("## Untitled items skipped (name normalizes to 'untitled')")
+    if plan.skipped_untitled:
+        for s in plan.skipped_untitled:
+            lines.append(f"- `{s}`")
     else:
         lines.append("- none")
     lines.append("")
@@ -518,7 +881,7 @@ def render_report(plan: VaultPlan, write_mode: bool = False) -> str:
         lines.append("")
 
     if plan.stray_files:
-        lines.append("## Stray category-level files ignored")
+        lines.append("## Stray non-canvas/md files ignored")
         for s in plan.stray_files:
             lines.append(f"- `{s}`")
         lines.append("")
@@ -526,6 +889,10 @@ def render_report(plan: VaultPlan, write_mode: bool = False) -> str:
     unique_media = len(shas) + unhashed_unique
     dupes = attach_total - len(shas) - unhashed_unique if shas else 0
     lines.append("## Notes")
+    lines.append(f"- Empty design shells kept (placeholders are deliberate): {len(shells)}")
+    if plan.name_collisions:
+        for old, new in plan.name_collisions:
+            lines.append(f"- ⚠ design name collision: '{old}' imported as '{new}'")
     lines.append(f"- HEIC images encountered: {plan.heic_count}")
     lines.append(f"- Link-node URLs appended to entry bodies: {plan.link_node_count}")
     if shas:
@@ -535,9 +902,10 @@ def render_report(plan: VaultPlan, write_mode: bool = False) -> str:
 
     lines.append("## Grand totals")
     lines.append(
-        f"**Would create {len(plan.projects)} projects, {total_designs} designs, "
+        f"**Would import into project '{plan.project_name}': {len(plan.designs)} designs, "
         f"{total_entries} entries, {unique_media} media** "
-        f"({attach_total} image attachments, deduped by sha256)."
+        f"({attach_total} image attachments, deduped by sha256); "
+        f"{len(plan.assigned)} canvases fuzzy-assigned, {len(plan.questions)} open questions."
     )
     return "\n".join(lines) + "\n"
 
@@ -677,22 +1045,21 @@ class ApiImporter:
         self.counts["media_deduped" if deduped else "media_created"] += 1
 
     def run(self, plan: VaultPlan) -> None:
-        for project_name, designs in plan.projects.items():
-            print(f"project {project_name!r} ({len(designs)} designs)")
-            project_id = self.ensure_project(project_name)
-            for design in designs:
-                design_id = self.ensure_design(project_id, design)
-                markers = self.existing_markers(design_id)
-                for entry in design.entries:
-                    if entry_marker(entry.source_rel) in markers:
-                        self.counts["entries_skipped"] += 1
-                        print(f"    = entry exists, skipping: {entry.source_rel}")
-                        continue
-                    entry_id = self.create_entry(design_id, entry)
-                    print(f"    + entry [{entry.phase}] {entry.source_rel} "
-                          f"({len(entry.images)} images)")
-                    for img in entry.images:
-                        self.upload_image(img, entry_id)
+        print(f"project {plan.project_name!r} ({len(plan.designs)} designs)")
+        project_id = self.ensure_project(plan.project_name)
+        for design in plan.designs:
+            design_id = self.ensure_design(project_id, design)
+            markers = self.existing_markers(design_id)
+            for entry in design.entries:
+                if entry_marker(entry.source_rel) in markers:
+                    self.counts["entries_skipped"] += 1
+                    print(f"    = entry exists, skipping: {entry.source_rel}")
+                    continue
+                entry_id = self.create_entry(design_id, entry)
+                print(f"    + entry [{entry.phase}] {entry.source_rel} "
+                      f"({len(entry.images)} images)")
+                for img in entry.images:
+                    self.upload_image(img, entry_id)
         print("\nImport complete:")
         for k, v in self.counts.items():
             print(f"  {k}: {v}")

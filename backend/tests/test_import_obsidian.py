@@ -1,9 +1,11 @@
 """Obsidian importer: pure planning against a synthetic vault in tmp_path.
 
-Covers classification (design folder / bare canvas / UNSURE), date inference
-precedence (filename timestamp > YYYY-MM bucket > mtime), the unsure list,
-dry-run report counts, and that a dry run performs ZERO network calls
-(sockets are hard-blocked while the CLI runs).
+Covers the REORGANIZED-vault classification (design folder vs grouping vs
+mixed, conservative fuzzy assignment of loose canvases, untitled skips,
+deliberate empty shells, single-project plan), date inference precedence
+(filename timestamp > YYYY-MM bucket > mtime), the UNSURE list, the QUESTIONS
+section, dry-run report counts, and that a dry run performs ZERO network
+calls (sockets are hard-blocked while the CLI runs).
 
 No API, no DB, no MinIO — scan_vault/render_report are pure local reads.
 """
@@ -18,13 +20,17 @@ import pytest
 
 from scripts.import_obsidian import (
     LOCAL_TZ,
+    PROJECT_NAME,
     UNSURE_PATTERNS,
     bucket_from_path,
     classify_unsure,
     entry_marker,
+    fuzzy_match,
     hash_images,
     infer_image_date,
+    is_untitled,
     main,
+    normalize_name,
     render_report,
     scan_vault,
     strip_frontmatter,
@@ -54,8 +60,28 @@ def _text_node(text: str) -> dict:
 
 @pytest.fixture()
 def vault(tmp_path: Path) -> Path:
-    """Tiny synthetic vault: 2 categories, 1 design folder (canvas + md),
-    1 bare canvas, 1 UNSURE folder, _attachments with a timestamped file."""
+    """Synthetic vault exercising every classification rule:
+
+    BAGS/
+      Moon Bag/                 design folder (canvas + notes + empty md)
+      Clutches Wallets/         GROUPING (no direct canvas, subfolders)
+        Rei's Clutch/           nested design
+        Rei's Card Holders/     nested design
+      BOW BAG/                  MIXED (direct canvases + subfolders)
+        Rei's Mini Bow/         nested design
+        Rei's Empty Shell/      deliberate empty shell
+        REI MINI BOW.canvas     -> fuzzy-ASSIGNED into Rei's Mini Bow
+        random thing.canvas     -> no match -> QUESTIONS
+      Research/                 UNSURE
+      Trims.md                  loose category note -> QUESTIONS
+      Untitled 1.canvas         untitled -> skipped
+      Untitled/                 untitled folder -> skipped
+    SHOES/
+      Rei's Bow Boots/          design folder (empty -> shell w/ assigned canvas)
+      BOW BOOTS.canvas          bare canvas, fuzzy match -> assigned into it
+      gloves.canvas             bare canvas, no match -> its own design
+      Moon Bag/                 design name collision with BAGS/Moon Bag
+    """
     v = tmp_path / "vault"
     att = v / "_attachments"
     (att / "2024-09").mkdir(parents=True)
@@ -67,11 +93,10 @@ def vault(tmp_path: Path) -> Path:
 
     bags = v / "Designs" / "BAGS"
     shoes = v / "Designs" / "SHOES"
+
+    # plain design folder: canvas (2 real images, 1 missing ref, texts) + notes
     moon = bags / "Moon Bag"
     moon.mkdir(parents=True)
-    shoes.mkdir(parents=True)
-
-    # design folder: canvas (2 real images, 1 missing ref, texts) + 2 notes
     (moon / "moon.canvas").write_text(
         _canvas(
             _file_node(f"_attachments/2024-09/{TS_IMG}"),
@@ -87,9 +112,27 @@ def vault(tmp_path: Path) -> Path:
     (moon / "Dated.md").write_text("---\ndate: 2025-03-05\n---\nlining sourced\n")
     (moon / "Empty.md").write_text("\n\n")  # skipped, reported
 
-    # bare canvas at category level -> its own design
-    (shoes / "BOW.canvas").write_text(
-        _canvas(_file_node(f"_attachments/{LOOSE_IMG}"), _text_node("bow boots"))
+    # GROUPING: no direct canvas, only subfolders -> NOT a design itself
+    cw = bags / "Clutches Wallets"
+    (cw / "Rei's Clutch").mkdir(parents=True)
+    (cw / "Rei's Clutch" / "clutches.canvas").write_text(
+        _canvas(_text_node("fold-over clutch"))
+    )
+    (cw / "Rei's Card Holders").mkdir()
+    (cw / "Rei's Card Holders" / "cards.canvas").write_text(
+        _canvas(_text_node("card slots"))
+    )
+
+    # MIXED: direct canvases AND subfolders
+    bow = bags / "BOW BAG"
+    (bow / "Rei's Mini Bow").mkdir(parents=True)
+    (bow / "Rei's Mini Bow" / "mini.canvas").write_text(_canvas(_text_node("mini bow")))
+    (bow / "Rei's Empty Shell").mkdir()          # deliberate placeholder
+    (bow / "REI MINI BOW.canvas").write_text(    # exact-normalized match -> assigned
+        _canvas(_text_node("assigned moodboard"))
+    )
+    (bow / "random thing.canvas").write_text(    # no match -> QUESTIONS
+        _canvas(_text_node("???"))
     )
 
     # UNSURE folder: must import nothing
@@ -98,15 +141,37 @@ def vault(tmp_path: Path) -> Path:
     (research / "chanel.canvas").write_text(
         _canvas(_file_node(f"_attachments/2024-09/{TS_IMG}"))
     )
+
+    # loose category-level note -> QUESTIONS; untitled items -> skipped
+    (bags / "Trims.md").write_text("ball trims\nlogo trims\n")
+    (bags / "Untitled 1.canvas").write_text(_canvas(_text_node("scratch")))
+    (bags / "Untitled").mkdir()
+
+    # SHOES: bare canvas fuzzy-assigned into an (empty) sibling design folder
+    (shoes / "Rei's Bow Boots").mkdir(parents=True)
+    (shoes / "BOW BOOTS.canvas").write_text(
+        _canvas(_file_node(f"_attachments/{LOOSE_IMG}"), _text_node("bow boots"))
+    )
+    # bare canvas with no sibling match -> its own design (canvas-name provenance)
+    (shoes / "gloves.canvas").write_text(_canvas(_text_node("long gloves")))
+    # design name collision across categories (single project => must be unique)
+    (shoes / "Moon Bag").mkdir()
+    (shoes / "Moon Bag" / "moon shoe.canvas").write_text(_canvas(_text_node("moon shoe")))
     return v
 
 
-# ── date inference precedence ────────────────────────────────────────────────
+def _by_name(plan) -> dict[str, object]:
+    return {d.name: d for d in plan.designs}
+
+
+# ── date inference precedence (unchanged behavior) ───────────────────────────
 
 def test_filename_timestamp_beats_bucket(vault: Path):
     assert timestamp_from_filename(TS_IMG) == datetime(2024, 9, 16, 12, 0, 0, tzinfo=LOCAL_TZ)
     # the file sits in the 2024-09 bucket, but the filename timestamp wins
-    got = infer_image_date(f"_attachments/2024-09/{TS_IMG}", vault / "_attachments/2024-09" / TS_IMG)
+    got = infer_image_date(
+        f"_attachments/2024-09/{TS_IMG}", vault / "_attachments/2024-09" / TS_IMG
+    )
     assert got == datetime(2024, 9, 16, 12, 0, 0, tzinfo=LOCAL_TZ)
 
 
@@ -132,17 +197,132 @@ def test_frontmatter_strip_and_date():
     assert (body, dt) == ("no frontmatter here", None)
 
 
-# ── classification ───────────────────────────────────────────────────────────
+# ── normalization + fuzzy matching ───────────────────────────────────────────
+
+def test_normalize_name():
+    assert normalize_name("REI CLASSIC BIKER") == "classic biker"
+    assert normalize_name("Rei's Classic Biker") == "classic biker"
+    assert normalize_name("Rei's Two Piece 🧜🏽‍♀️") == "two piece"
+    assert normalize_name("SKUNT!") == "skunt"
+
+
+def test_is_untitled():
+    assert is_untitled("Untitled")
+    assert is_untitled("Untitled 1")
+    assert is_untitled("untitled  2")
+    assert not is_untitled("Untitled Dress")
+    assert not is_untitled("Moon Bag")
+
+
+def test_fuzzy_match_tiers():
+    folders = ["Rei's Classic Biker", "Rei's Wet Biker Jacket", "Rei's Classic Moto"]
+    # exact normalized equality beats weaker token overlaps with other folders
+    assert fuzzy_match("REI CLASSIC BIKER", folders) == (
+        "Rei's Classic Biker", ["Rei's Classic Biker"]
+    )
+    # token-subset containment: mini bow bag ⊆ mini bow bow bag, uniquely
+    win, _ = fuzzy_match(
+        "mini bow bag", ["Rei's Mini Bow Bow Bag", "Rei's Bow Bow Bowling Bag"]
+    )
+    assert win == "Rei's Mini Bow Bow Bag"
+    # weak overlap (jaccard < 0.5) must NOT match: scales != lace
+    win, matches = fuzzy_match("Mermaid Scales", ["Mermaid Lace", "Rei's Two Piece"])
+    assert win is None and matches == []
+    # ambiguity: same-tier tie yields no winner but reports both
+    win, matches = fuzzy_match("bow", ["bow east", "bow west"])
+    assert win is None and set(matches) == {"bow east", "bow west"}
+    # no candidates / empty normalization
+    assert fuzzy_match("Rei's", ["whatever"]) == (None, [])
+
+
+# ── classification: designs, groupings, mixed, shells, untitled ─────────────
+
+def test_single_project_plan(vault: Path):
+    plan = scan_vault(vault)
+    assert plan.project_name == PROJECT_NAME == "rei by Rei"
+    # categories are recorded per design, title-cased (raw dir kept alongside)
+    cats = {(d.category, d.category_dir) for d in plan.designs}
+    assert cats == {("Bags", "BAGS"), ("Shoes", "SHOES")}
+
 
 def test_classification(vault: Path):
     plan = scan_vault(vault)
-    assert set(plan.projects) == {"Bags", "Shoes"}  # CATEGORY -> title-cased project
-    bags = {d.name for d in plan.projects["Bags"]}
-    shoes = {d.name for d in plan.projects["Shoes"]}
-    assert bags == {"Moon Bag"}          # design folder, original casing kept
-    assert shoes == {"BOW"}              # bare canvas -> design named by file stem
+    names = _by_name(plan)
+    # design folders (provenance 'folder')
+    assert names["Moon Bag"].provenance == "folder"
+    # grouping folder is NOT a design; its subfolders are
+    assert "Clutches Wallets" not in names
+    assert {"Rei's Clutch", "Rei's Card Holders"} <= set(names)
+    # mixed folder is NOT a design; its subfolders are
+    assert "BOW BAG" not in names
+    assert {"Rei's Mini Bow", "Rei's Empty Shell"} <= set(names)
+    # bare canvas with no match -> its own design named after the stem
+    assert names["gloves"].provenance == "canvas name"
     # nothing from Research leaked into designs
-    assert all("Research" not in d.source_rel for ds in plan.projects.values() for d in ds)
+    assert all("Research" not in d.source_rel for d in plan.designs)
+
+
+def test_mixed_folder_fuzzy_assignment_and_questions(vault: Path):
+    plan = scan_vault(vault)
+    names = _by_name(plan)
+    # exact-normalized loose canvas assigned into the sibling subfolder design
+    mini = names["Rei's Mini Bow"]
+    assert mini.assigned_sources == ["Designs/BAGS/BOW BAG/REI MINI BOW.canvas"]
+    assert any(a.design_name == "Rei's Mini Bow" for a in plan.assigned)
+    # design now has 2 canvases -> both entry bodies get the canvas-stem prefix
+    canvas_bodies = [e.body for e in mini.entries if e.kind == "canvas"]
+    assert len(canvas_bodies) == 2
+    assert any(b.startswith("mini") for b in canvas_bodies)
+    assert any(b.startswith("REI MINI BOW") for b in canvas_bodies)
+    # unmatched mixed-folder canvas is NOT imported -> QUESTIONS with candidates
+    q = next(q for q in plan.questions if q.rel_path.endswith("random thing.canvas"))
+    assert q.kind == "canvas"
+    assert "no fuzzy match" in q.reason
+    assert set(q.candidates) == {"Rei's Mini Bow", "Rei's Empty Shell"}
+    assert "random thing" not in names
+
+
+def test_bare_canvas_fuzzy_match_to_sibling_folder(vault: Path):
+    plan = scan_vault(vault)
+    names = _by_name(plan)
+    boots = names["Rei's Bow Boots"]
+    assert boots.provenance == "folder"
+    assert boots.assigned_sources == ["Designs/SHOES/BOW BOOTS.canvas"]
+    assert len(boots.entries) == 1          # the assigned canvas fills the shell
+    assert boots.entries[0].occurred_at == LOOSE_MTIME
+    # single canvas -> no name prefix on the body
+    assert boots.entries[0].body == "bow boots"
+    assert "BOW BOOTS" not in names         # not a design of its own
+
+
+def test_untitled_skipped_and_shells_kept(vault: Path):
+    plan = scan_vault(vault)
+    names = _by_name(plan)
+    assert "Untitled" not in names and "Untitled 1" not in names
+    assert set(plan.skipped_untitled) == {
+        "Designs/BAGS/Untitled",
+        "Designs/BAGS/Untitled 1.canvas",
+    }
+    # deliberate placeholder folder still becomes a (flagged) design shell
+    shell = names["Rei's Empty Shell"]
+    assert shell.entries == []
+
+
+def test_loose_note_goes_to_questions(vault: Path):
+    plan = scan_vault(vault)
+    q = next(q for q in plan.questions if q.rel_path == "Designs/BAGS/Trims.md")
+    assert q.kind == "note"
+    assert "loose note" in q.reason
+    assert all(d.source_rel != "Designs/BAGS/Trims.md" for d in plan.designs)
+
+
+def test_name_collision_gets_category_suffix(vault: Path):
+    plan = scan_vault(vault)
+    names = set(_by_name(plan))
+    assert "Moon Bag" in names
+    assert "Moon Bag (Shoes)" in names       # BAGS wins first, SHOES suffixed
+    assert plan.name_collisions == [("Moon Bag", "Moon Bag (Shoes)")]
+    assert len(names) == len(plan.designs)   # unique within the single project
 
 
 def test_unsure_list(vault: Path):
@@ -160,7 +340,7 @@ def test_unsure_list(vault: Path):
 
 def test_entries_and_dates(vault: Path):
     plan = scan_vault(vault)
-    moon = plan.projects["Bags"][0]
+    moon = _by_name(plan)["Moon Bag"]
     by_src = {Path(e.source_rel).name: e for e in moon.entries}
     assert set(by_src) == {"moon.canvas", "Notes.md", "Dated.md"}  # Empty.md skipped
 
@@ -179,10 +359,9 @@ def test_entries_and_dates(vault: Path):
     assert dated.occurred_at == datetime(2025, 3, 5, tzinfo=LOCAL_TZ)   # frontmatter date
     assert "---" not in dated.body
 
-    bow = plan.projects["Shoes"][0].entries[0]
-    assert bow.occurred_at == LOOSE_MTIME              # image mtime fallback
-
-    assert ("Designs/BAGS/Moon Bag/moon.canvas", "_attachments/2024-11/gone.png") in plan.missing_files
+    assert (
+        "Designs/BAGS/Moon Bag/moon.canvas", "_attachments/2024-11/gone.png"
+    ) in plan.missing_files
     assert "Designs/BAGS/Moon Bag/Empty.md" in plan.empty_sources
 
 
@@ -194,15 +373,32 @@ def test_entry_marker_is_deterministic():
 
 # ── dry-run report ───────────────────────────────────────────────────────────
 
-def test_dry_run_report_counts(vault: Path):
+def test_dry_run_report(vault: Path):
     plan = scan_vault(vault)
     hash_images(plan)
     report = render_report(plan)
-    # 2 projects, 2 designs, 4 entries (moon.canvas, Notes.md, Dated.md, BOW.canvas);
-    # 4 attachments but plain.png is shared between the canvas and the md embed
-    # -> 3 sha-unique media
-    assert "Would create 2 projects, 2 designs, 4 entries, 3 media" in report
+    # 8 designs: Moon Bag, Rei's Clutch, Rei's Card Holders, Rei's Mini Bow,
+    # Rei's Empty Shell, gloves, Rei's Bow Boots, Moon Bag (Shoes); entries:
+    # moon.canvas, Notes.md, Dated.md, clutches, cards, mini, REI MINI BOW,
+    # BOW BOOTS, gloves, moon shoe = 10; 4 image attachments (plain.png shared
+    # between canvas and md embed) -> 3 sha-unique media
+    assert "Would import into project 'rei by Rei': 8 designs, 10 entries, 3 media" in report
     assert "(4 image attachments, deduped by sha256)" in report
+    assert "2 canvases fuzzy-assigned, 2 open questions" in report
+    # provenance + assignment annotations
+    assert "**gloves** (canvas name)" in report
+    assert "**Moon Bag** (folder)" in report
+    assert (
+        "- assigned: `Designs/SHOES/BOW BOOTS.canvas` → design "
+        "**Rei's Bow Boots** (assigned into)" in report
+    )
+    # sections
+    assert "## QUESTIONS — need your call" in report
+    assert "`Designs/BAGS/BOW BAG/random thing.canvas` (canvas)" in report
+    assert "`Designs/BAGS/Trims.md` (note)" in report
+    assert "⚠ empty design shell" in report
+    assert "'Moon Bag' imported as 'Moon Bag (Shoes)'" in report
+    assert "`Designs/BAGS/Untitled 1.canvas`" in report
     assert "`Designs/BAGS/Research` (matched 'research')" in report
     assert "gone.png" in report            # missing file surfaced
     assert "Empty.md" in report            # empty source surfaced
