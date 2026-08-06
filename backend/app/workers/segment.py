@@ -86,12 +86,14 @@ def segment_media(media_id: str) -> str:
 def _segment(media_id: str, settings) -> str:
     with psycopg.connect(_sync_dsn()) as conn:
         row = conn.execute(
-            "SELECT workspace_id, kind, r2_key, sha256 FROM media WHERE id = %s",
+            "SELECT m.workspace_id, m.kind, m.r2_key, m.sha256, d.category "
+            "FROM media m LEFT JOIN designs d ON d.id = m.design_id "
+            "WHERE m.id = %s",
             (media_id,),
         ).fetchone()
         if row is None:
             return "skipped:missing"
-        ws, kind, r2_key, sha = row
+        ws, kind, r2_key, sha, category = row
         if kind != "image":
             return f"skipped:kind={kind}"
 
@@ -126,7 +128,11 @@ def _segment(media_id: str, settings) -> str:
     regions = None
     last_err: ValueError | None = None
     for attempt in range(1 + SEG_PARSE_RETRIES):
-        raw_text, meta = segmentation.call_gemini(img, settings.gemini_api_key)
+        # category-aware part vocabulary (v3): slippers get footwear anatomy,
+        # dresses get bodice/hem/neckline — see segmentation.SEG_VOCAB
+        raw_text, meta = segmentation.call_gemini(
+            img, settings.gemini_api_key, prompt=segmentation.seg_prompt(category)
+        )
         logger.info(
             "MODEL-CALL gemini segmentation media=%s model=%s latency=%.1fs "
             "tokens_in=%s tokens_out=%s finish=%s attempt=%d",

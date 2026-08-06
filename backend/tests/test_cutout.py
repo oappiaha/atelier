@@ -210,7 +210,7 @@ async def test_segment_runs_on_cutout(authed, upload_media, monkeypatch):
         events.append("photoroom")
         return _rgba_png(480, 360, split=True)  # left transparent, right green
 
-    def fake_gemini(image, api_key):
+    def fake_gemini(image, api_key, prompt=None):
         events.append("gemini")
         seen["left"] = image.getpixel((120, 180))
         seen["right"] = image.getpixel((360, 180))
@@ -262,7 +262,7 @@ async def test_segment_falls_back_to_original_when_photoroom_fails(
     def fake_photoroom(image_bytes: bytes) -> bytes:
         raise httpx.ConnectError("photoroom unreachable")
 
-    def fake_gemini(image, api_key):
+    def fake_gemini(image, api_key, prompt=None):
         seen["center"] = image.getpixel((240, 180))
         return RAW_FULL, GEMINI_META
 

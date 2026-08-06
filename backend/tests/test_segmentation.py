@@ -222,7 +222,7 @@ async def test_segment_pipeline_end_to_end(authed, upload_media, monkeypatch):
 
     calls = {"n": 0}
 
-    def fake_call_gemini(image, api_key):
+    def fake_call_gemini(image, api_key, prompt=None):
         calls["n"] += 1
         return RAW, {
             "model": "gemini-3.5-flash", "latency_s": 0.0,
@@ -313,7 +313,7 @@ async def test_segment_json_parse_retry_recovers(authed, upload_media, monkeypat
     responses = ['[{"box_2d": [100, 100, 900', RAW]
     calls = {"n": 0}
 
-    def fake_call_gemini(image, api_key):
+    def fake_call_gemini(image, api_key, prompt=None):
         calls["n"] += 1
         return responses[min(calls["n"] - 1, len(responses) - 1)], _META
 
@@ -346,7 +346,7 @@ async def test_segment_json_parse_gives_up_after_two_retries(
     media = await upload_media(data=_photo_png())
     calls = {"n": 0}
 
-    def fake_call_gemini(image, api_key):
+    def fake_call_gemini(image, api_key, prompt=None):
         calls["n"] += 1
         return "no json array here at all", _META  # ValueError path
 
@@ -366,9 +366,27 @@ async def test_segment_json_parse_gives_up_after_two_retries(
     rds.close()
 
     # the transient clears -> the same media segments fine on the next run
-    def fixed_call_gemini(image, api_key):
+    def fixed_call_gemini(image, api_key, prompt=None):
         calls["n"] += 1
         return RAW, _META
 
     monkeypatch.setattr(segmentation, "call_gemini", fixed_call_gemini)
     assert segment_worker.segment_media(media["id"]) == "segmented:1"
+
+
+# ── seg_prompt v3: category-aware part vocabulary (2026-08-06) ───────────────
+
+def test_seg_prompt_matches_category_vocab():
+    from app.wada.segmentation import SEG_VOCAB, seg_prompt
+
+    shoes = seg_prompt("Shoes")  # designs.category is title-cased free text
+    assert "sole, upper, toe cap" in shoes
+    assert "never repeat a label" in shoes
+    dresses = seg_prompt("dresses")
+    assert "bodice" in dresses and "neckline" in dresses
+    # unknown / missing category → the cross-catalogue fallback examples
+    for cat in (None, "", "spaceships"):
+        p = seg_prompt(cat)
+        assert "Examples — bags:" in p
+    # distinct vocabularies produce distinct prompts (denim/pants share one)
+    assert len({seg_prompt(c) for c in SEG_VOCAB}) == len(set(SEG_VOCAB.values()))

@@ -36,21 +36,52 @@ AREA_FRAC_MIN = 0.005
 # product types, demands DISTINCT labels, and forces construction/texture
 # splits on monochrome products (a single-colour sneaker still has suede
 # overlays / mesh panels / rubber sole as separate colourable parts).
-SEG_PROMPT = (
-    "Give the segmentation masks for the distinct physical parts of this product. "
-    "Examples — bags: body, flap, straps, handles, hardware, zipper, pouch, trim; "
-    "footwear: sole, upper, toe cap, heel, laces, tongue, mesh panel, overlay, lining; "
-    "garments: body panel, sleeves, collar, cuffs, pockets, waistband, hood. "
-    "Split parts by construction and material/texture boundaries (leather vs suede "
-    "vs mesh vs rubber vs metal) even when the whole product is a single colour. "
-    "Give every region a DISTINCT, specific label — never repeat a label. "
-    "At most 8 regions, no background.\n"
-    'Output a JSON list of segmentation masks where each entry contains the 2D '
-    'bounding box in the key "box_2d" ([ymin, xmin, ymax, xmax] normalized to '
-    '0-1000), the segmentation mask in the key "mask" as a polygon of [x, y] '
-    "coordinates normalized to 0-1000, the text label in the key \"label\", and "
-    'your labeling confidence 0.0-1.0 in the key "confidence".'
+#: Category (designs.category, lowercased) → the part vocabulary hint the
+#: model anchors on. Hints, not limits — the model may name parts outside the
+#: list. Fallback spans the catalogue for uncategorized designs.
+SEG_VOCAB: dict[str, str] = {
+    "bags": "body, flap, straps, handles, hardware, zipper, pouch, gusset, trim",
+    "shoes": "sole, upper, toe cap, heel, laces, tongue, mesh panel, overlay, lining, strap",
+    "dresses": "bodice, skirt panel, sleeves, straps, neckline, collar, waistband, hem, lining, hardware",
+    "jackets": "body panel, sleeves, collar, lapels, cuffs, pockets, zipper, hood, lining, hardware",
+    "outerwear accessories": "body, hood, brim, cuffs, fringe, lining, hardware, trim",
+    "denim": "leg panels, waistband, pockets, belt loops, cuffs, seams, hardware",
+    "pants": "leg panels, waistband, pockets, belt loops, cuffs, seams, hardware",
+    "skirts": "skirt panels, waistband, hem, pockets, pleats, hardware",
+    "suits": "jacket body, lapels, sleeves, pockets, trousers, waistband, buttons, lining",
+    "fun stuff": "body, band, brim, strap, buckle, lens, sole, trim, hardware",
+}
+_SEG_VOCAB_FALLBACK = (
+    "bags: body, flap, straps, handles, hardware, zipper; "
+    "footwear: sole, upper, toe cap, heel, laces, tongue, mesh panel, overlay; "
+    "garments: body panel, sleeves, collar, cuffs, pockets, waistband, hood"
 )
+
+
+def seg_prompt(category: str | None = None) -> str:
+    """The segmentation prompt, with the part vocabulary matched to the
+    design's category when one is known (v3, 2026-08-06)."""
+    vocab = SEG_VOCAB.get((category or "").strip().lower())
+    examples = f"For this product type expect parts like: {vocab}. " if vocab else (
+        f"Examples — {_SEG_VOCAB_FALLBACK}. "
+    )
+    return (
+        "Give the segmentation masks for the distinct physical parts of this product. "
+        + examples
+        + "Split parts by construction and material/texture boundaries (leather vs suede "
+        "vs mesh vs rubber vs metal) even when the whole product is a single colour. "
+        "Give every region a DISTINCT, specific label — never repeat a label. "
+        "At most 8 regions, no background.\n"
+        'Output a JSON list of segmentation masks where each entry contains the 2D '
+        'bounding box in the key "box_2d" ([ymin, xmin, ymax, xmax] normalized to '
+        '0-1000), the segmentation mask in the key "mask" as a polygon of [x, y] '
+        "coordinates normalized to 0-1000, the text label in the key \"label\", and "
+        'your labeling confidence 0.0-1.0 in the key "confidence".'
+    )
+
+
+#: Back-compat constant (uncategorized fallback prompt).
+SEG_PROMPT = seg_prompt()
 
 
 @dataclass
@@ -111,7 +142,7 @@ def working_image_and_alpha(source: bytes) -> tuple[Image.Image, "np.ndarray | N
     return flat, alpha
 
 
-def call_gemini(image: Image.Image, api_key: str) -> tuple[str, dict]:
+def call_gemini(image: Image.Image, api_key: str, prompt: str | None = None) -> tuple[str, dict]:
     """ONE segmentation call (TDD §8.1: once per image, ever — the caller
     enforces the caching). Returns (raw_text, usage/latency metadata).
 
@@ -124,7 +155,7 @@ def call_gemini(image: Image.Image, api_key: str) -> tuple[str, dict]:
     t0 = time.time()
     resp = client.models.generate_content(
         model=SEG_MODEL,
-        contents=[SEG_PROMPT, image],
+        contents=[prompt or SEG_PROMPT, image],
         config=types.GenerateContentConfig(
             temperature=0.0,
             max_output_tokens=16384,
