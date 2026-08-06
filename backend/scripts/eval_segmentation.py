@@ -106,7 +106,7 @@ def eval_media(conn, s3, bucket: str, media_id: str, category: str | None) -> di
         "E1_multi_region": len(kept) >= 2,
         "E2_distinct_labels": len(set(labels)) == len(labels),
         "E3_vocab_match": (not vocab) or bool(vocab_tokens & label_tokens),
-        "E4_coverage": (coverage is None) or coverage >= 0.55,
+        "E4_coverage": (coverage is None) or coverage >= 0.70,
         "E5_no_dup_blobs": dup_blobs == 0,
     }
     return {
@@ -254,7 +254,7 @@ def eval_file(path, cutout_bytes: bytes, category: str | None) -> dict:
         "E1_multi_region": len(kept) >= 2,
         "E2_distinct_labels": len(set(labels)) == len(labels),
         "E3_vocab_match": (not vocab) or bool(vocab_tokens & label_tokens),
-        "E4_coverage": (coverage is None) or coverage >= 0.55,
+        "E4_coverage": (coverage is None) or coverage >= 0.70,
         "E5_no_dup_blobs": dup_blobs == 0,
     }
     return {
