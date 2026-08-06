@@ -418,7 +418,7 @@ textarea.field{min-height:84px;resize:none;}
    sweep beam + faint detection grid + corner brackets + roaming lock-on dots.
    Pure CSS, must read at 320px and at desktop alike. */
 .scan-frame{position:relative;border-radius:16px;overflow:hidden;background:var(--bg-deep);
-  max-height:min(300px,42dvh);display:flex;align-items:center;justify-content:center;}
+  width:fit-content;max-width:100%;margin:0 auto;}
 .scan-frame img{max-width:100%;max-height:min(300px,42dvh);object-fit:contain;display:block;}
 .scan-beam{position:absolute;left:0;right:0;top:0;height:34%;pointer-events:none;
   background:linear-gradient(180deg,transparent,rgba(90,140,255,.14) 42%,rgba(90,140,255,.5) 50%,rgba(90,140,255,.14) 58%,transparent);

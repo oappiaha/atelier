@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   api, apiErrorDetail, duplicateStudy, estimateStudy, fetchPalette, fetchPalettes,
   fetchRegions, fetchStudy, generateStudy, patchStudy, putSlots,
-  rememberStudy, MAX_PAINT_SLOTS,
+  rememberStudy, rescanRegions, segmentMedia, MAX_PAINT_SLOTS,
   type Design as DesignT, type Estimate, type Media, type Palette,
   type Region, type SlotIn, type Study,
 } from '../lib/api'
@@ -268,6 +268,27 @@ export default function Studio() {
   // ── duplicate & tweak (SHIP-1): a frozen study forks into a fresh draft —
   //    same base photo, slots (groupings/locks/anchors) and palette carried,
   //    estimate recomputed on arrival. ─────────────────────────────────────────
+  // RE-SCAN (2026-08-06): replace a poor segmentation (one-blob monochrome
+  // sneaker, fur blobs). Destructive to the draft's slots — reload after.
+  const [rescanning, setRescanning] = useState(false)
+  const rescan = async () => {
+    if (!baseMediaId || rescanning) return
+    setRescanning(true)
+    try {
+      await rescanRegions(baseMediaId)
+      toast('Re-scanning — regions will be replaced')
+      for (let i = 0; i < 20; i++) {
+        await new Promise(r => setTimeout(r, 3000))
+        const out = await segmentMedia(baseMediaId)
+        if (out.status === 'complete' && out.regions.length) break
+      }
+      navigate(0) // fresh regions ⇒ fresh composer state; repaint slots
+    } catch (e) {
+      toast(apiErrorDetail(e, 'Re-scan failed'))
+      setRescanning(false)
+    }
+  }
+
   const duplicateM = useMutation({
     mutationFn: () => duplicateStudy(studyId!),
     onSuccess: ns => {
@@ -509,8 +530,22 @@ export default function Studio() {
               <div className="panel rise" style={{ padding: 14, animationDelay: '.08s' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 6, flexWrap: 'wrap' }}>
                   <div className="eyebrow">Regions</div>
-                  <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', letterSpacing: '.08em' }}>
-                    MODEL-FOUND · TAP TO PAINT
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div className="mono" style={{ fontSize: 8, color: 'var(--faint)', letterSpacing: '.08em' }}>
+                      MODEL-FOUND · TAP TO PAINT
+                    </div>
+                    {!frozen && baseMediaId && (
+                      <button
+                        className="kbtn"
+                        id="rescan-regions"
+                        title="Not enough regions? Re-run segmentation with the current model — replaces these regions; painted slots need repainting"
+                        disabled={rescanning}
+                        style={{ width: 'auto', padding: '0 8px', fontFamily: 'DM Mono', fontSize: 8, letterSpacing: '.08em' }}
+                        onClick={rescan}
+                      >
+                        {rescanning ? 'SCANNING…' : '⟳ RE-SCAN'}
+                      </button>
+                    )}
                   </div>
                 </div>
                 {regionsQ.isLoading && (

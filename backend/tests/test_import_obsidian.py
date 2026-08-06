@@ -427,3 +427,90 @@ def test_dry_run_makes_zero_network_calls(vault: Path, tmp_path: Path, monkeypat
 def test_write_requires_api_base_and_token(vault: Path):
     with pytest.raises(SystemExit):
         main(["--vault", str(vault), "--write"])
+
+
+# ── category: sent on creation; standalone --backfill-categories mode ────────
+# (fake http client — the write path is exercised for real by the API suite;
+# here we pin WHAT the importer sends, with zero network)
+
+class _FakeResp:
+    def __init__(self, payload):
+        self.status_code = 200
+        self.text = ""
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+class _FakeHttp:
+    """Stands in for ApiImporter.http: canned GETs, recorded POSTs/PATCHes."""
+
+    def __init__(self, routes: dict):
+        self.routes = routes
+        self.posts: list[tuple[str, dict]] = []
+        self.patches: list[tuple[str, dict]] = []
+
+    def get(self, path):
+        return _FakeResp(self.routes[path])
+
+    def post(self, path, json):
+        self.posts.append((path, json))
+        return _FakeResp({"id": "new-design"})
+
+    def patch(self, path, json):
+        self.patches.append((path, json))
+        return _FakeResp({})
+
+
+def _importer_with(routes: dict):
+    from scripts.import_obsidian import ApiImporter
+
+    imp = ApiImporter("http://unused", "not-a-real-token")
+    imp.http = _FakeHttp(routes)
+    return imp
+
+
+def test_write_sends_category_on_design_creation(vault: Path):
+    plan = scan_vault(vault)
+    moon = _by_name(plan)["Moon Bag"]
+    imp = _importer_with({"/projects/p1/designs": []})  # nothing exists yet
+    assert imp.ensure_design("p1", moon) == "new-design"
+    (path, payload), = imp.http.posts
+    assert path == "/designs"
+    assert payload["category"] == "Bags"                # title-cased from BAGS/
+    assert payload["name"] == "Moon Bag"
+    assert payload["project_id"] == "p1"
+
+
+def test_backfill_categories_patches_only_existing_null(vault: Path, capsys):
+    plan = scan_vault(vault)
+    imp = _importer_with({
+        "/projects": [{"id": "p1", "name": PROJECT_NAME}],
+        "/projects/p1/designs": [
+            {"id": "d-moon", "name": "Moon Bag", "category": None},      # -> patched
+            {"id": "d-gloves", "name": "gloves", "category": "Custom"},  # hand-set: kept
+            {"id": "d-alien", "name": "Not In The Vault", "category": None},  # unplanned
+        ],
+    })
+    imp.backfill_categories(plan)
+    assert imp.http.patches == [("/designs/d-moon", {"category": "Bags"})]
+    assert imp.http.posts == []                          # backfill creates nothing
+    out = capsys.readouterr().out
+    assert "1 set, 1 already had one, 6 planned designs not in the project" in out
+
+
+def test_backfill_missing_project_is_a_clean_exit(vault: Path):
+    plan = scan_vault(vault)
+    imp = _importer_with({"/projects": []})
+    with pytest.raises(SystemExit, match="not found"):
+        imp.backfill_categories(plan)
+    assert imp.http.patches == []
+
+
+def test_backfill_requires_api_base_and_token(vault: Path):
+    with pytest.raises(SystemExit):
+        main(["--vault", str(vault), "--backfill-categories"])
+    with pytest.raises(SystemExit):  # and it never combines with --write
+        main(["--vault", str(vault), "--write", "--backfill-categories",
+              "--api-base", "http://localhost:1", "--token", "t"])

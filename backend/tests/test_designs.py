@@ -29,9 +29,10 @@ async def test_get_design_shape(authed, design_factory):
     assert r.status_code == 200
     body = r.json()
     assert {
-        "id", "project_id", "name", "status", "index_no", "materials",
+        "id", "project_id", "name", "status", "index_no", "materials", "category",
         "cover_media_id", "cover_url", "entry_count", "media_count", "created_at",
     } <= set(body)
+    assert body["category"] is None  # nullable, no default
     assert body["entry_count"] == 0
     assert body["media_count"] == 0
     assert body["cover_url"] is None
@@ -77,6 +78,29 @@ async def test_patch_design_fields(authed, design_factory):
     # read-back through GET (authoritative)
     r = await authed.get(f"/designs/{d['id']}")
     assert r.json()["name"] == "Renamed"
+
+
+async def test_create_design_with_category_round_trips(authed, design_factory):
+    d = await design_factory(category="Bags")
+    assert d["category"] == "Bags"
+    # read-back through GET (authoritative), and the project list carries it too
+    r = await authed.get(f"/designs/{d['id']}")
+    assert r.status_code == 200
+    assert r.json()["category"] == "Bags"
+    r = await authed.get(f"/projects/{d['project_id']}/designs")
+    assert next(x for x in r.json() if x["id"] == d["id"])["category"] == "Bags"
+
+
+async def test_patch_design_category(authed, design_factory):
+    d = await design_factory()
+    assert d["category"] is None
+    r = await authed.patch(f"/designs/{d['id']}", json={"category": "Shoes"})
+    assert r.status_code == 200
+    assert r.json()["category"] == "Shoes"
+    # read-back through GET (authoritative); other fields untouched
+    r = await authed.get(f"/designs/{d['id']}")
+    assert r.json()["category"] == "Shoes"
+    assert r.json()["name"] == d["name"]
 
 
 async def test_patch_design_status(authed, design_factory):

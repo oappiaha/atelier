@@ -501,3 +501,49 @@ async def export_colorway(
         download_url=presign_download(export_key, f"colorway-{cw.id}-2k.png"),
         cost_cents=cost,
     )
+
+
+class CoverOut(BaseModel):
+    design_id: uuid.UUID
+    cover_media_id: uuid.UUID
+
+
+@router.post("/colorways/{colorway_id}/cover", response_model=CoverOut)
+async def colorway_as_cover(
+    colorway_id: uuid.UUID,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> CoverOut:
+    """Make this colorway the product's cover (Beezy 2026-08-06). Pins it
+    first when needed — a cover must never expire, and pinning also runs the
+    timeline bridge that registers the archive media row we point the cover
+    at. Idempotent: re-covering an already-pinned colorway just re-points."""
+    cw = await _colorway_or_404(colorway_id, ctx, session)
+    if cw.status != "pinned":
+        await pin_colorway(colorway_id, ctx, session)  # commits; 409s if not ready
+        cw = await _colorway_or_404(colorway_id, ctx, session)
+
+    ws = str(ctx.workspace_id)
+    png, sha, _w, _h = await run_in_threadpool(_fetch_pin_bytes, cw.image_key)
+    del png
+    media = (
+        await session.execute(
+            text("SELECT id FROM media WHERE workspace_id = :ws AND sha256 = :sha"),
+            {"ws": ws, "sha": sha},
+        )
+    ).one_or_none()
+    if media is None:  # bridge failure would have surfaced at pin time
+        raise HTTPException(409, "pinned colorway has no archive media row")
+
+    design = (
+        await session.execute(
+            text(
+                "UPDATE designs SET cover_media_id = :mid, updated_at = now() "
+                "WHERE id = (SELECT design_id FROM studies WHERE id = :sid) "
+                "AND workspace_id = :ws RETURNING id"
+            ),
+            {"mid": str(media.id), "sid": str(cw.study_id), "ws": ws},
+        )
+    ).one()
+    await session.commit()
+    return CoverOut(design_id=design.id, cover_media_id=media.id)

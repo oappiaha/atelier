@@ -83,6 +83,7 @@ export interface Design {
   status: DesignStatus
   index_no: number
   materials: string | null
+  category: string | null
   cover_media_id: string | null
   cover_url: string | null
   entry_count: number
@@ -506,6 +507,10 @@ export const EXPORT_REGEN_DOLLARS = '0.135'
 export const CENTS_PER_CALL = 6.75
 
 export const fetchRegions = (mediaId: string) => api<Region[]>(`/media/${mediaId}/regions`)
+export const rescanRegions = (mediaId: string) =>
+  api<SegmentOut>(`/media/${mediaId}/segment?force=true`, { method: 'POST' })
+export const colorwayAsCover = (colorwayId: string) =>
+  api<{ design_id: string; cover_media_id: string }>(`/colorways/${colorwayId}/cover`, { method: 'POST' })
 export const segmentMedia = (mediaId: string) =>
   api<SegmentOut>(`/media/${mediaId}/segment`, { method: 'POST' })
 export const fetchStudy = (studyId: string) => api<Study>(`/studies/${studyId}`)

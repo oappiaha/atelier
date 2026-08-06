@@ -7,7 +7,7 @@ import {
 } from '../lib/api'
 import { toast, useNewDesign } from '../lib/store'
 
-/** New-design sheet: name (required) + optional materials and status.
+/** New-design sheet: name (required) + optional materials, category and status.
  *  POST /designs assigns index_no automatically and defaults to 'developing';
  *  a non-default status is applied with a follow-up PATCH.
  *  Opened with a preselected project (Project view / Home with one project),
@@ -18,6 +18,7 @@ export default function NewDesignSheet() {
 
   const [name, setName] = useState('')
   const [materials, setMaterials] = useState('')
+  const [category, setCategory] = useState('')
   const [status, setStatus] = useState<DesignStatus>('developing')
   const [pickedId, setPickedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -40,6 +41,7 @@ export default function NewDesignSheet() {
     if (open) {
       setName('')
       setMaterials('')
+      setCategory('')
       setStatus('developing')
       setPickedId(null)
       setBusy(false)
@@ -58,6 +60,7 @@ export default function NewDesignSheet() {
           project_id: project.id,
           name: name.trim(),
           materials: materials.trim() || null,
+          ...(category.trim() ? { category: category.trim() } : {}),
         }),
       })
       if (status !== 'developing') {
@@ -130,6 +133,14 @@ export default function NewDesignSheet() {
             value={materials}
             onChange={e => setMaterials(e.target.value)}
             style={{ marginTop: 9, minHeight: 64 }}
+          />
+          <input
+            className="field"
+            id="nd-category"
+            placeholder="Category (optional) — e.g. Bags"
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            style={{ marginTop: 9 }}
           />
 
           <div className="chips" style={{ marginTop: 10 }}>

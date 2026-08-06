@@ -19,7 +19,9 @@ the canvas, or the name of the canvas file itself"):
 - EVERYTHING imports into the ONE existing project "rei by Rei" (PROJECT_NAME).
   Design names are therefore unique per project — collisions get the category
   suffixed in parens and are flagged. The category (title-cased) is recorded
-  per design in the plan (a future `category` field will consume it).
+  per design in the plan and sent as the design's `category` on creation;
+  --backfill-categories patches it onto designs imported before the field
+  existed (see ApiImporter.backfill_categories).
 - Each top-level folder under Designs is a CATEGORY. At any depth below:
   1. UNSURE_PATTERNS names (checked at every level) are listed and skipped
      whole — nothing inside them is imported.
@@ -260,7 +262,7 @@ class PlannedEntry:
 
 @dataclass
 class PlannedDesign:
-    category: str            # title-cased, e.g. 'Fun Stuff' (future `category` field)
+    category: str            # title-cased, e.g. 'Fun Stuff' (the design's category)
     category_dir: str        # raw category folder name, e.g. 'FUN STUFF'
     name: str
     source_rel: str
@@ -953,7 +955,11 @@ class ApiImporter:
         for d in existing:
             if d["name"] == design.name:
                 return d["id"]
-        payload: dict = {"project_id": project_id, "name": design.name}
+        payload: dict = {
+            "project_id": project_id,
+            "name": design.name,
+            "category": design.category,
+        }
         span = design.date_span
         if span:
             payload["started_at"] = span[0].date().isoformat()
@@ -1044,6 +1050,46 @@ class ApiImporter:
         )
         self.counts["media_deduped" if deduped else "media_created"] += 1
 
+    def backfill_categories(self, plan: VaultPlan) -> None:
+        """Standalone repair mode (--backfill-categories): designs imported
+        before the `category` field existed get theirs PATCHed in. Only
+        designs that already EXIST by name in the project are touched, and
+        only when their category is currently null — a hand-set category is
+        never overwritten. Creates nothing."""
+        projects = self._check(self.http.get("/projects"), "list projects")
+        project = next((p for p in projects if p["name"] == plan.project_name), None)
+        if project is None:
+            raise SystemExit(
+                f"project {plan.project_name!r} not found — nothing to backfill"
+            )
+        existing = {
+            d["name"]: d
+            for d in self._check(
+                self.http.get(f"/projects/{project['id']}/designs"), "list designs"
+            )
+        }
+        filled = already = absent = 0
+        for design in plan.designs:
+            d = existing.get(design.name)
+            if d is None:
+                absent += 1
+                continue
+            if d.get("category") is not None:
+                already += 1
+                continue
+            self._check(
+                self.http.patch(
+                    f"/designs/{d['id']}", json={"category": design.category}
+                ),
+                f"backfill category on {design.name}",
+            )
+            filled += 1
+            print(f"  ~ {design.name!r} category -> {design.category!r}")
+        print(
+            f"\nBackfill complete: {filled} set, {already} already had one, "
+            f"{absent} planned designs not in the project"
+        )
+
     def run(self, plan: VaultPlan) -> None:
         print(f"project {plan.project_name!r} ({len(plan.designs)} designs)")
         project_id = self.ensure_project(plan.project_name)
@@ -1077,12 +1123,17 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--token", help="JWT bearer token (required with --write)")
     ap.add_argument("--write", action="store_true",
                     help="perform the real import through the API (default: dry run)")
+    ap.add_argument("--backfill-categories", action="store_true",
+                    help="standalone repair: PATCH the planned category onto designs "
+                         "that already exist by name and have none (creates nothing)")
     ap.add_argument("--report", type=Path, default=None,
                     help="markdown report path (default: ./obsidian_import_report.md)")
     args = ap.parse_args(argv)
 
-    if args.write and not (args.api_base and args.token):
-        ap.error("--write requires --api-base and --token")
+    if args.write and args.backfill_categories:
+        ap.error("--write and --backfill-categories are mutually exclusive")
+    if (args.write or args.backfill_categories) and not (args.api_base and args.token):
+        ap.error("--write/--backfill-categories require --api-base and --token")
     if not args.vault.is_dir():
         ap.error(f"vault not found: {args.vault}")
 
@@ -1100,6 +1151,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"\n--write: importing into {args.api_base} ...\n")
         importer = ApiImporter(args.api_base, args.token)
         importer.run(plan)
+    elif args.backfill_categories:
+        print(f"\n--backfill-categories: patching categories on {args.api_base} ...\n")
+        importer = ApiImporter(args.api_base, args.token)
+        importer.backfill_categories(plan)
     else:
         print("\nDry run only — no API calls were made. Re-run with --write "
               "--api-base URL --token JWT to import.")

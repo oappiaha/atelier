@@ -30,11 +30,20 @@ WORKING_LONG_EDGE = 1536  # the generation frame (TDD §8.1 PREPARE; M0 conventi
 CONF_MIN = 0.35
 AREA_FRAC_MIN = 0.005
 
-# M0's proven prompt (segment.py), generalized from "bag" to "product" but
-# keeping the part vocabulary that produced clean anatomy on both photos.
+# M0's proven prompt, v2 (2026-08-06): the original example vocabulary was
+# bag anatomy only — on footwear the model returned either one whole-shoe
+# blob or clone regions all labeled "body" (Rei 1's: 5×"body"). v2 spans
+# product types, demands DISTINCT labels, and forces construction/texture
+# splits on monochrome products (a single-colour sneaker still has suede
+# overlays / mesh panels / rubber sole as separate colourable parts).
 SEG_PROMPT = (
-    "Give the segmentation masks for the distinct physical parts of this product "
-    "(e.g. body, flap, straps, handles, hardware/buckles/studs, zipper, pouch, trim). "
+    "Give the segmentation masks for the distinct physical parts of this product. "
+    "Examples — bags: body, flap, straps, handles, hardware, zipper, pouch, trim; "
+    "footwear: sole, upper, toe cap, heel, laces, tongue, mesh panel, overlay, lining; "
+    "garments: body panel, sleeves, collar, cuffs, pockets, waistband, hood. "
+    "Split parts by construction and material/texture boundaries (leather vs suede "
+    "vs mesh vs rubber vs metal) even when the whole product is a single colour. "
+    "Give every region a DISTINCT, specific label — never repeat a label. "
     "At most 8 regions, no background.\n"
     'Output a JSON list of segmentation masks where each entry contains the 2D '
     'bounding box in the key "box_2d" ([ymin, xmin, ymax, xmax] normalized to '

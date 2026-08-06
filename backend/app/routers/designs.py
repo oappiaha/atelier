@@ -23,6 +23,7 @@ class DesignIn(BaseModel):
     project_id: uuid.UUID
     name: str
     materials: str | None = None
+    category: str | None = None
     started_at: date | None = None
 
 
@@ -31,6 +32,7 @@ class DesignPatch(BaseModel):
     status: str | None = None
     cover_media_id: uuid.UUID | None = None
     materials: str | None = None
+    category: str | None = None
 
 
 class DesignOut(BaseModel):
@@ -40,6 +42,7 @@ class DesignOut(BaseModel):
     status: str
     index_no: int
     materials: str | None
+    category: str | None
     cover_media_id: uuid.UUID | None
     cover_url: str | None = None
     entry_count: int = 0
@@ -96,8 +99,9 @@ async def create_design(
         await session.execute(
             text(
                 """
-                INSERT INTO designs (workspace_id, project_id, name, materials, started_at, index_no)
-                SELECT :ws, :pid, :name, :materials, :started_at,
+                INSERT INTO designs (workspace_id, project_id, name, materials, category,
+                                     started_at, index_no)
+                SELECT :ws, :pid, :name, :materials, :category, :started_at,
                        COALESCE(MAX(index_no), 0) + 1
                 FROM designs WHERE project_id = :pid
                 RETURNING *
@@ -108,6 +112,7 @@ async def create_design(
                 "pid": str(body.project_id),
                 "name": body.name,
                 "materials": body.materials,
+                "category": body.category,
                 "started_at": body.started_at,
             },
         )
@@ -161,7 +166,7 @@ async def patch_design(
     if body.status is not None and body.status not in STATUSES:
         raise HTTPException(422, f"status must be one of {STATUSES}")
     sets, params = [], {"ws": str(ctx.workspace_id), "id": str(design_id)}
-    for field in ("name", "status", "cover_media_id", "materials"):
+    for field in ("name", "status", "cover_media_id", "materials", "category"):
         val = getattr(body, field)
         if val is not None:
             sets.append(f"{field} = :{field}")

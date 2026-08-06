@@ -9,12 +9,17 @@ import { useNewDesign, useShare } from '../lib/store'
 
 const FALLBACK_ART = 'linear-gradient(150deg,#DCE4EE,#B9C6D8 55%,#8FA2BC)'
 
+/* categories are free text (vault folder names) — display-normalize once */
+const titleCase = (s: string) =>
+  s.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase())
+
 export default function Project() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
   const openShare = useShare(s => s.openShare)
   const openNewDesign = useNewDesign(s => s.openNewDesign)
   const [status, setStatus] = useState<'all' | DesignStatus>('all')
+  const [category, setCategory] = useState<'all' | string>('all')
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -38,7 +43,17 @@ export default function Project() {
     placeholderData: keepPreviousData,
   })
 
-  const designs = status === 'all' ? all.data : filtered.data
+  // category chips: built from the loaded designs, shown only when the index
+  // actually spans >=2 categories; filtering is client-side ON TOP of the
+  // status filter (which stays a real ?status= API query)
+  const categories = Array.from(
+    new Set((all.data ?? []).flatMap(d => (d.category ? [titleCase(d.category)] : []))),
+  ).sort()
+  const catActive = category !== 'all' && categories.includes(category)
+  const byStatus = status === 'all' ? all.data : filtered.data
+  const designs = catActive
+    ? byStatus?.filter(d => d.category && titleCase(d.category) === category)
+    : byStatus
   const count = (s: DesignStatus) => all.data?.filter(d => d.status === s).length ?? 0
 
   return (
@@ -75,6 +90,28 @@ export default function Project() {
           )}
         </div>
 
+        {categories.length >= 2 && (
+          <div className="chips" style={{ marginBottom: 8 }} id="category-chips">
+            <button
+              className={`chip${catActive ? '' : ' on'}`}
+              data-cat="all"
+              onClick={() => setCategory('all')}
+            >
+              All
+            </button>
+            {categories.map(c => (
+              <button
+                key={c}
+                className={`chip${category === c ? ' on' : ''}`}
+                data-cat={c}
+                onClick={() => setCategory(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="chips" style={{ marginBottom: 14 }}>
           <button
             className={`chip${status === 'all' ? ' on' : ''}`}
@@ -106,9 +143,9 @@ export default function Project() {
                 Nothing here yet.
               </div>
             )}
-            {/* key={status}: the filter changed the CONTENT, so the grid re-animates —
+            {/* key={filter}: the filter changed the CONTENT, so the grid re-animates —
                correct per TDD §10.2. Within a filter, cards keep stable uuid keys. */}
-            <div className="dgrid" id="dgrid" key={status}>
+            <div className="dgrid" id="dgrid" key={`${status}:${catActive ? category : 'all'}`}>
               {designs?.map((d, k) => (
                 <div
                   key={d.id}

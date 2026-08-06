@@ -87,6 +87,7 @@ async def _regions_for(media_id: uuid.UUID, ctx: Ctx, session: AsyncSession) -> 
 @router.post("/media/{media_id}/segment", response_model=SegmentOut, status_code=200)
 async def segment(
     media_id: uuid.UUID,
+    force: bool = False,
     ctx: Ctx = Depends(get_ctx),
     session: AsyncSession = Depends(get_session),
 ):
@@ -97,6 +98,16 @@ async def segment(
         raise HTTPException(422, f"segmentation runs on images, not {media.kind}")
 
     cached = await _regions_for(media_id, ctx, session)
+    if cached and force:
+        # RE-SCAN (2026-08-06): replace a poor segmentation (e.g. the pre-v2
+        # prompt's one-blob monochrome sneaker). Draft slots referencing the
+        # old region ids must be repainted; frozen/generated studies are
+        # untouched (their union masks are content-addressed copies).
+        await session.execute(
+            text("DELETE FROM regions WHERE media_id = :id"), {"id": str(media_id)}
+        )
+        await session.commit()
+        cached = []
     if cached:  # TDD §9: idempotent — cached regions, no model call, ever again
         return SegmentOut(status="complete", regions=cached)
 

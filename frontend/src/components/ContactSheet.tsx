@@ -11,7 +11,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  apiErrorDetail, clearLegacyPins, exportColorway, fetchColorways,
+  apiErrorDetail, clearLegacyPins, colorwayAsCover, exportColorway, fetchColorways,
   generateOne, generateStudy, pinColorway, readLegacyPins,
   rejectColorway, unpinColorway, unrejectColorway,
   CENTS_PER_CALL, EXPORT_REGEN_DOLLARS,
@@ -38,6 +38,18 @@ const triggerDownload = (url: string) => {
 
 export default function ContactSheet({ studyId }: { studyId: string }) {
   const qc = useQueryClient()
+
+  // colorway → product cover (pins it first server-side: covers must not expire)
+  const coverM = useMutation({
+    mutationFn: (cw: Colorway) => colorwayAsCover(cw.id),
+    onSuccess: out => {
+      toast('This colorway is now the product cover')
+      qc.invalidateQueries({ queryKey: ['design', out.design_id] })
+      qc.invalidateQueries({ queryKey: ['designs'] })
+      qc.invalidateQueries({ queryKey: ['colorways', studyId] })
+    },
+    onError: e => toast(apiErrorDetail(e, 'Could not set the cover')),
+  })
   const sheetQ = useQuery({
     queryKey: ['colorways', studyId],
     queryFn: () => fetchColorways(studyId),
@@ -452,6 +464,15 @@ export default function ContactSheet({ studyId }: { studyId: string }) {
                   onClick={() => setExportAsk(a => !a)}
                 >
                   EXPORT 2K
+                </button>
+                <button
+                  className="kbtn gc-open"
+                  id="cwlb-cover"
+                  title="Make this colorway the product's cover (pins it too)"
+                  disabled={coverM.isPending}
+                  onClick={() => coverM.mutate(detail)}
+                >
+                  {coverM.isPending ? '…' : '◧ USE AS COVER'}
                 </button>
                 {detail.status === 'ready' && (
                   <button

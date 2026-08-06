@@ -169,8 +169,13 @@ function MTile({
         </svg>
       </div>
       <div className="m-tag">{media.phase ? PHASE_LABELS[media.phase] : media.kind}</div>
-      {media.source_app === 'wada' && (
-        <div className="m-tag" style={{ left: 'auto', right: 8 }}>WADA</div>
+      {/* provenance chip: import/studio-sourced media wears its source app —
+          plain captures and web saves stay untagged (photoroom keeps its
+          STUDIO SHOT label in the hub / Lightbox guard instead) */}
+      {(media.source_app === 'wada' || media.source_app === 'obsidian') && (
+        <div className="m-tag" style={{ left: 'auto', right: 8 }}>
+          {media.source_app.toUpperCase()}
+        </div>
       )}
     </div>
   )
@@ -319,7 +324,7 @@ export default function Design() {
           <div className="rise">
             <div className={`dstatus ${d ? STATUS_CLASS[d.status] : 'st-dev'}`} style={{ marginBottom: 6 }}>
               <span className="dot" />
-              {d ? `${STATUS_LABELS[d.status]} · ${d.entry_count} entries · ${d.media_count} media` : '…'}
+              {d ? `${STATUS_LABELS[d.status]}${d.category ? ` · ${d.category}` : ''} · ${d.entry_count} entries · ${d.media_count} media` : '…'}
             </div>
             <div className="syne" style={{ fontSize: 28, fontWeight: 800 }}>{d?.name ?? '…'}</div>
           </div>
