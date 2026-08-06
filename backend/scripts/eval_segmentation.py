@@ -1,0 +1,182 @@
+"""Segmentation EVAL (2026-08-06, Beezy: "comprehensive testing on whether the
+model expectations are reflected in the scan — this is crucial").
+
+Runs the CURRENT seg_prompt against a sample of real archive images and
+scores each scan against explicit expectations — WITHOUT writing regions,
+so it never disturbs cached segmentations. Re-run after any prompt change:
+this is prompt regression testing with real model calls (≈1 Gemini flash
+call per image; cutouts are reused from cache when present).
+
+Run inside the worker/api container (needs GEMINI_API_KEY, DB, storage):
+
+    python -m scripts.eval_segmentation [--per-category 2] [--category shoes]
+
+Expectations scored per image:
+  E1  regions_kept >= 2       (a product with one region can't be composed)
+  E2  no duplicate labels     (v2 prompt demands distinct labels)
+  E3  labels overlap the category vocabulary (>=1 vocab token match)
+  E4  polygon-union covers >=55% of the product silhouette (cutout alpha
+      when available, else skipped) — coarse polygons undershoot, the
+      compositor's coverage pass closes the rest; below 55% the model
+      genuinely missed structure
+  E5  no region is a near-duplicate blob of another (IoU > 0.85)
+"""
+
+import argparse
+import sys
+from collections import defaultdict
+
+import numpy as np
+import psycopg
+
+from app.config import get_settings
+from app.storage import get_s3
+from app.wada import refine, segmentation
+
+
+def _sync_dsn() -> str:
+    return get_settings().database_url.replace("+asyncpg", "")
+
+
+def _iou(a: np.ndarray, b: np.ndarray) -> float:
+    inter = np.logical_and(a, b).sum()
+    union = np.logical_or(a, b).sum()
+    return float(inter) / float(union) if union else 0.0
+
+
+def eval_media(conn, s3, bucket: str, media_id: str, category: str | None) -> dict:
+    row = conn.execute(
+        "SELECT r2_key, cutout_key FROM media WHERE id = %s", (media_id,)
+    ).fetchone()
+    r2_key, cutout_key = row
+    source = s3.get_object(Bucket=bucket, Key=cutout_key or r2_key)["Body"].read()
+    img, alpha = segmentation.working_image_and_alpha(source)
+
+    # THE FULL FLOW, mirrored stage by stage (same functions the worker runs):
+    # cutout-aware PREPARE -> category prompt -> model -> parse -> drop rules
+    # -> per-region GrabCut refinement. Only persistence is skipped.
+    prompt = segmentation.seg_prompt(category)
+    regions = None
+    for _attempt in range(2):  # the worker retries JSON-parse failures too
+        raw_text, meta = segmentation.call_gemini(
+            img, get_settings().gemini_api_key, prompt=prompt
+        )
+        try:
+            regions = segmentation.parse_regions(raw_text)
+            break
+        except Exception:  # noqa: BLE001, S112 — one retry, like SEG_PARSE_RETRIES
+            continue
+    if regions is None:
+        raise RuntimeError("model output unparseable after retry")
+    kept, dropped = segmentation.apply_drop_rules(regions)
+
+    image_arr = np.asarray(img)
+    masks = {}
+    refine_fallbacks = 0
+    for r in kept:
+        coarse = segmentation.polygon_to_mask(r.polygon, img.width, img.height)
+        refined, info = refine.refine_mask(image_arr, coarse)
+        if info.used_fallback:
+            refine_fallbacks += 1
+        masks[id(r)] = refined
+    labels = [r.label.strip().lower() for r in kept]
+
+    vocab = segmentation.SEG_VOCAB.get((category or "").strip().lower(), "")
+    vocab_tokens = {t.strip() for part in vocab.split(",") for t in part.split()}
+    label_tokens = {t for lb in labels for t in lb.split()}
+
+    union = None
+    for m in masks.values():
+        union = m if union is None else np.logical_or(union, m)
+    coverage = None
+    if alpha is not None and union is not None and alpha.sum():
+        coverage = float(np.logical_and(union, alpha).sum()) / float(alpha.sum())
+
+    dup_blobs = 0
+    ms = list(masks.values())
+    for i in range(len(ms)):
+        for j in range(i + 1, len(ms)):
+            if _iou(ms[i], ms[j]) > 0.85:
+                dup_blobs += 1
+
+    checks = {
+        "E1_multi_region": len(kept) >= 2,
+        "E2_distinct_labels": len(set(labels)) == len(labels),
+        "E3_vocab_match": (not vocab) or bool(vocab_tokens & label_tokens),
+        "E4_coverage": (coverage is None) or coverage >= 0.55,
+        "E5_no_dup_blobs": dup_blobs == 0,
+    }
+    return {
+        "media_id": media_id,
+        "category": category,
+        "kept": len(kept),
+        "dropped": len(dropped),
+        "labels": labels,
+        "coverage": coverage,
+        "latency_s": meta.get("latency_s"),
+        "refine_fallbacks": refine_fallbacks,
+        "checks": checks,
+        "passed": all(checks.values()),
+    }
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--per-category", type=int, default=2)
+    ap.add_argument("--category", default=None, help="limit to one category")
+    args = ap.parse_args()
+
+    s3 = get_s3()
+    bucket = get_settings().s3_bucket
+    results = []
+    with psycopg.connect(_sync_dsn()) as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT ON (d.id) m.id, d.category, d.name
+            FROM media m
+            JOIN designs d ON d.id = m.design_id
+            WHERE m.kind = 'image' AND m.source_app IS DISTINCT FROM 'wada'
+              AND (%(cat)s::text IS NULL OR lower(d.category) = lower(%(cat)s::text))
+            ORDER BY d.id, m.created_at ASC
+            """,
+            {"cat": args.category},
+        ).fetchall()
+        by_cat: dict[str, list] = defaultdict(list)
+        for media_id, category, name in rows:
+            key = (category or "uncategorized").lower()
+            if len(by_cat[key]) < args.per_category:
+                by_cat[key].append((str(media_id), category, name))
+
+        for cat in sorted(by_cat):
+            for media_id, category, name in by_cat[cat]:
+                try:
+                    r = eval_media(conn, s3, bucket, media_id, category)
+                except Exception as exc:  # noqa: BLE001 — eval keeps going
+                    r = {"media_id": media_id, "category": category,
+                         "error": str(exc)[:120], "passed": False, "checks": {}}
+                r["design"] = name
+                results.append(r)
+                status = "PASS" if r["passed"] else "FAIL"
+                print(f"[{status}] {cat:<24} {name[:30]:<30} "
+                      f"regions={r.get('kept', '?')} labels={r.get('labels', '?')} "
+                      f"cov={f'{r['coverage']:.0%}' if r.get('coverage') is not None else 'n/a'}")
+
+    print("\n===== SCORECARD =====")
+    n_pass = sum(1 for r in results if r["passed"])
+    print(f"{n_pass}/{len(results)} images meet ALL expectations")
+    fail_counts: dict[str, int] = defaultdict(int)
+    for r in results:
+        for check, ok in r.get("checks", {}).items():
+            if not ok:
+                fail_counts[check] += 1
+    for check, n in sorted(fail_counts.items()):
+        print(f"  {check}: {n} failure(s)")
+    for r in results:
+        if not r["passed"]:
+            bad = [c for c, ok in r.get("checks", {}).items() if not ok]
+            print(f"  FAIL {r['design']}: {', '.join(bad) or r.get('error', '?')}")
+    return 0 if n_pass == len(results) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

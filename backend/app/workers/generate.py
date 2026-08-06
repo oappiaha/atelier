@@ -660,6 +660,20 @@ def _prepare(study_id: str, colorway_id: str) -> dict | str:
                 )
             cover_in[(1, j)] = arr
         covered, cov = coverage.cover_silhouette(alpha, cover_in)
+        # GUARD (eval 2026-08-06): on-model / collage photos have silhouettes
+        # far larger than the garment (person's skin+hair are "product" to the
+        # cutout). Growing slots into a residual that big would recolor the
+        # model, not the piece — so above 30% residual, leave masks untouched
+        # and let the composite keep the original pixels there.
+        residual_frac = cov.residual_px / max(int(alpha.sum()), 1)
+        if residual_frac > 0.30:
+            logger.warning(
+                "study=%s residual %.0f%% of silhouette — likely on-model/collage "
+                "base; skipping coverage growth (regions only, no fill-in)",
+                study_id, residual_frac * 100,
+            )
+            cov = cov.__class__(residual_px=0, n_components=0,
+                                added_px={k: 0 for k in cov.added_px})
         for idx in slot_mask:
             if cov.added_px[(0, idx)] == 0:
                 continue

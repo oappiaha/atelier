@@ -390,3 +390,13 @@ def test_seg_prompt_matches_category_vocab():
         assert "Examples — bags:" in p
     # distinct vocabularies produce distinct prompts (denim/pants share one)
     assert len({seg_prompt(c) for c in SEG_VOCAB}) == len(set(SEG_VOCAB.values()))
+
+
+def test_dedupe_labels_suffixes_symmetric_pairs():
+    from app.wada.segmentation import dedupe_labels
+
+    assert dedupe_labels(["sleeves", "sleeves", "collar", "sleeves"]) == [
+        "sleeves", "sleeves 2", "collar", "sleeves 3",
+    ]
+    assert dedupe_labels([]) == []
+    assert dedupe_labels(["body"]) == ["body"]

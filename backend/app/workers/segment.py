@@ -173,6 +173,10 @@ def _segment(media_id: str, settings) -> str:
     image_arr = np.asarray(img)
     lab = refine.srgb_to_lab(image_arr)
     prepared = []
+    # symmetric pairs come back as clone labels — make them distinguishable
+    # ('sleeves', 'sleeves 2') before keys/rows are minted (eval 2026-08-06)
+    for region, deduped in zip(kept, segmentation.dedupe_labels([r.label for r in kept])):
+        region.label = deduped
     for idx, region in enumerate(kept):
         coarse = segmentation.polygon_to_mask(region.polygon, w, h)
         refined, info = refine.refine_mask(image_arr, coarse)

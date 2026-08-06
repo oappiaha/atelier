@@ -220,3 +220,17 @@ def polygon_to_mask(polygon: list[list[float]], width: int, height: int) -> np.n
 
 def slugify(label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-") or "region"
+
+
+def dedupe_labels(labels: list[str]) -> list[str]:
+    """Symmetric pairs come back as clone labels ('sleeves','sleeves') no
+    matter how firmly the prompt forbids it (eval 2026-08-06: 8/21 images).
+    Deterministic fix at persist time: duplicates get ' 2', ' 3', … suffixes
+    so every region row is distinguishable in the composer."""
+    seen: dict[str, int] = {}
+    out = []
+    for lb in labels:
+        n = seen.get(lb, 0) + 1
+        seen[lb] = n
+        out.append(lb if n == 1 else f"{lb} {n}")
+    return out
