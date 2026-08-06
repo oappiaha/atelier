@@ -73,7 +73,9 @@
   cursor:pointer;position:relative;transform-style:preserve-3d;
   transition:transform .45s var(--ease),box-shadow .4s ease;}
 .dcard:hover{box-shadow:var(--s2);}
-.dcard .art{height:150px;transition:transform .7s var(--ease);background-size:cover;background-position:center;}
+.dcard .art{height:150px;transition:transform .7s var(--ease);background-size:cover;background-position:center;
+  position:relative;overflow:hidden;}
+.dcard .art-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;}
 @media(min-width:900px){.dcard .art{height:170px;}}
 .dcard:hover .art{transform:scale(1.07);}
 .card-idx{position:absolute;top:9px;right:10px;font-family:'DM Mono';font-size:8.5px;letter-spacing:.1em;

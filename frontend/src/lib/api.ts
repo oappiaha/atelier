@@ -98,6 +98,7 @@ export interface Media {
   phase: Phase | null
   url: string
   thumb_url: string | null
+  thumb_lg_url?: string | null
   width: number | null
   height: number | null
   duration_ms: number | null

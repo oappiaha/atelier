@@ -66,6 +66,7 @@ class MediaOut(BaseModel):
     phase: str | None
     url: str
     thumb_url: str | None
+    thumb_lg_url: str | None = None  # 800px variant — heroes; full url is for lightboxes
     cutout_url: str | None = None  # PhotoRoom cutout (additive, WADA-CUT)
     width: int | None
     height: int | None
@@ -81,6 +82,12 @@ def _media_out(r) -> MediaOut:
         id=r.id, design_id=r.design_id, entry_id=r.entry_id, kind=r.kind, phase=r.phase,
         url=presign_get(r.r2_key),
         thumb_url=presign_get(r.thumb_key) if r.thumb_key else None,
+        # thumbs.generate always renders 200/400/800 at canonical keys (TDD §3);
+        # thumb_key points at 400 — derive the 800 for hero-sized surfaces
+        thumb_lg_url=(
+            presign_get(r.thumb_key.replace("/400.webp", "/800.webp"))
+            if r.thumb_key and r.thumb_key.endswith("/400.webp") else None
+        ),
         cutout_url=presign_get(r.cutout_key) if r.cutout_key else None,
         width=r.width, height=r.height, duration_ms=r.duration_ms,
         caption=r.caption, source_url=r.source_url, source_app=r.source_app,

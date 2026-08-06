@@ -113,18 +113,19 @@ export default function Project() {
                 <div
                   key={d.id}
                   className="dcard"
-                  style={{ animation: 'tileIn .55s var(--ease) both', animationDelay: `${k * 0.06}s` }}
+                  // cap the stagger: with 100+ designs an uncapped k*0.06s left
+                  // the last card invisible for 6+ seconds
+                  style={{ animation: 'tileIn .55s var(--ease) backwards', animationDelay: `${Math.min(k, 11) * 0.05}s` }}
                   onClick={() => navigate(`/d/${d.id}`)}
                 >
                   <div className="card-idx">{String(d.index_no).padStart(3, '0')}</div>
-                  <div
-                    className="art"
-                    style={{
-                      background: d.cover_url
-                        ? `url(${JSON.stringify(d.cover_url)}) center/cover`
-                        : FALLBACK_ART,
-                    }}
-                  />
+                  <div className="art" style={d.cover_url ? undefined : { background: FALLBACK_ART }}>
+                    {d.cover_url && (
+                      /* real <img>: lazy-loads offscreen covers — a bg-image div
+                         fetched all 100+ eagerly */
+                      <img className="art-img" src={d.cover_url} alt="" loading="lazy" decoding="async" />
+                    )}
+                  </div>
                   <div className="label">
                     <div className="dname">{d.name}</div>
                     <div className={`dstatus ${STATUS_CLASS[d.status]}`}>

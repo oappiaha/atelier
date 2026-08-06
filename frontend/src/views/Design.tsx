@@ -228,7 +228,9 @@ export default function Design() {
   }, [media.data, coverId])
   const heroImages = images.slice(0, 8)
   const heroShown = heroImages[Math.min(heroIdx, Math.max(heroImages.length - 1, 0))] ?? null
-  const heroSrc = heroShown?.url ?? design.data?.cover_url ?? null
+  // 800px thumb for the hero — the full-res original (multi-MB for phone
+  // photos) is lightbox territory, not a background image
+  const heroSrc = heroShown ? (heroShown.thumb_lg_url ?? heroShown.url) : design.data?.cover_url ?? null
   const hero = useCrossfade(heroSrc)
 
   // delete product: destructive + final — entries/media/studies cascade
