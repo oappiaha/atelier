@@ -79,6 +79,9 @@ def eval_media(conn, s3, bucket: str, media_id: str, category: str | None) -> di
         if info.used_fallback:
             refine_fallbacks += 1
         masks[id(r)] = refined
+    # mirror the worker: symmetric clones get ' 2' suffixes at persist time
+    for r, lb in zip(kept, segmentation.dedupe_labels([r.label for r in kept])):
+        r.label = lb
     labels = [r.label.strip().lower() for r in kept]
 
     vocab = segmentation.SEG_VOCAB.get((category or "").strip().lower(), "")
@@ -132,32 +135,44 @@ def main() -> int:
     with psycopg.connect(_sync_dsn()) as conn:
         rows = conn.execute(
             """
-            SELECT DISTINCT ON (d.id) m.id, d.category, d.name
+            SELECT DISTINCT ON (d.id) m.id, d.category, d.name, m.phase
             FROM media m
             JOIN designs d ON d.id = m.design_id
             WHERE m.kind = 'image' AND m.source_app IS DISTINCT FROM 'wada'
               AND (%(cat)s::text IS NULL OR lower(d.category) = lower(%(cat)s::text))
-            ORDER BY d.id, m.created_at ASC
+            ORDER BY d.id,
+              -- study bases are PRODUCT shots: final/editorial/manufacturing
+              -- first; moodboard scraps (imports) only when nothing better
+              CASE m.phase WHEN 'final' THEN 0 WHEN 'editorial' THEN 1
+                           WHEN 'manufacturing' THEN 2 ELSE 3 END,
+              m.created_at ASC
             """,
             {"cat": args.category},
         ).fetchall()
         by_cat: dict[str, list] = defaultdict(list)
-        for media_id, category, name in rows:
+        for media_id, category, name, phase in rows:
             key = (category or "uncategorized").lower()
             if len(by_cat[key]) < args.per_category:
-                by_cat[key].append((str(media_id), category, name))
+                by_cat[key].append((str(media_id), category, name, phase))
 
         for cat in sorted(by_cat):
-            for media_id, category, name in by_cat[cat]:
+            for media_id, category, name, phase in by_cat[cat]:
                 try:
                     r = eval_media(conn, s3, bucket, media_id, category)
                 except Exception as exc:  # noqa: BLE001 — eval keeps going
                     r = {"media_id": media_id, "category": category,
                          "error": str(exc)[:120], "passed": False, "checks": {}}
+                # cohort: product shots are gradeable on coverage; moodboard
+                # scraps are references — E4 does not apply to them
+                cohort = "product" if phase in ("final", "editorial", "manufacturing") else "moodboard"
+                if cohort == "moodboard":
+                    r["checks"].pop("E4_coverage", None)
+                    r["passed"] = all(r["checks"].values()) if r["checks"] else False
                 r["design"] = name
+                r["cohort"] = cohort
                 results.append(r)
                 status = "PASS" if r["passed"] else "FAIL"
-                print(f"[{status}] {cat:<24} {name[:30]:<30} "
+                print(f"[{status}] {cohort[:4]:<5} {cat:<24} {name[:30]:<30} "
                       f"regions={r.get('kept', '?')} labels={r.get('labels', '?')} "
                       f"cov={f'{r['coverage']:.0%}' if r.get('coverage') is not None else 'n/a'}")
 
