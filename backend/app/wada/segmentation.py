@@ -160,6 +160,9 @@ def call_gemini(image: Image.Image, api_key: str, prompt: str | None = None) -> 
             temperature=0.0,
             max_output_tokens=16384,
             thinking_config=types.ThinkingConfig(thinking_level="minimal"),
+            # native JSON mode (corpus eval 2026-08-06: free-text output was
+            # unparseable on ~10% of products and emitted malformed box_2d)
+            response_mime_type="application/json",
         ),
     )
     usage = resp.usage_metadata
@@ -183,11 +186,20 @@ def parse_regions(raw_text: str) -> list[RawRegion]:
         poly = entry.get("mask")
         if not isinstance(poly, list) or len(poly) < 3:
             continue  # a region without a usable polygon can't become a mask
+        box = entry.get("box_2d")
+        if not isinstance(box, list) or len(box) != 4:
+            # malformed box (corpus eval: a 2-value box_2d crashed the whole
+            # scan) — derive it from the polygon instead of dying
+            ys = [p[0] for p in poly if isinstance(p, list) and len(p) == 2]
+            xs = [p[1] for p in poly if isinstance(p, list) and len(p) == 2]
+            if not ys:
+                continue
+            box = [min(ys), min(xs), max(ys), max(xs)]
         out.append(
             RawRegion(
                 label=str(entry.get("label", "region")),
                 confidence=float(entry.get("confidence", 1.0)),
-                box_2d=[int(v) for v in entry["box_2d"]],
+                box_2d=[int(v) for v in box],
                 polygon=poly,
             )
         )

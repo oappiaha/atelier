@@ -127,7 +127,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--per-category", type=int, default=2)
     ap.add_argument("--category", default=None, help="limit to one category")
+    ap.add_argument("--images", default=None, help="eval local <category>__<name>.jpg files instead of archive media")
     args = ap.parse_args()
+
+    if args.images:
+        return main_images(args.images)
 
     s3 = get_s3()
     bucket = get_settings().s3_bucket
@@ -190,6 +194,109 @@ def main() -> int:
         if not r["passed"]:
             bad = [c for c, ok in r.get("checks", {}).items() if not ok]
             print(f"  FAIL {r['design']}: {', '.join(bad) or r.get('error', '?')}")
+    return 0 if n_pass == len(results) else 1
+
+
+
+
+# ── local-images mode: the corpus harness (SSENSE flats etc.) ────────────────
+# Runs the COMPLETE flow from raw file bytes: PhotoRoom cutout (real call,
+# ~$0.02/img, cached to <file>.cutout.png beside the source) -> category
+# prompt -> Gemini -> parse/dedupe/drop -> refinement -> coverage vs the
+# cutout alpha. Category comes from the filename: <category>__<slug>.jpg
+# ('fun_stuff' -> 'fun stuff').
+
+def eval_file(path, cutout_bytes: bytes, category: str | None) -> dict:
+    del path  # category and bytes carry everything needed
+    img, alpha = segmentation.working_image_and_alpha(cutout_bytes)
+    prompt = segmentation.seg_prompt(category)
+    regions = None
+    for _attempt in range(2):
+        raw_text, meta = segmentation.call_gemini(
+            img, get_settings().gemini_api_key, prompt=prompt
+        )
+        try:
+            regions = segmentation.parse_regions(raw_text)
+            break
+        except Exception:  # noqa: BLE001, S112
+            continue
+    if regions is None:
+        raise RuntimeError("model output unparseable after retry")
+    kept, dropped = segmentation.apply_drop_rules(regions)
+    image_arr = np.asarray(img)
+    masks = {}
+    refine_fallbacks = 0
+    for r in kept:
+        coarse = segmentation.polygon_to_mask(r.polygon, img.width, img.height)
+        refined, info = refine.refine_mask(image_arr, coarse)
+        if info.used_fallback:
+            refine_fallbacks += 1
+        masks[id(r)] = refined
+    for r, lb in zip(kept, segmentation.dedupe_labels([r.label for r in kept])):
+        r.label = lb
+    labels = [r.label.strip().lower() for r in kept]
+    vocab = segmentation.SEG_VOCAB.get((category or "").strip().lower(), "")
+    vocab_tokens = {t.strip() for part in vocab.split(",") for t in part.split()}
+    label_tokens = {t for lb in labels for t in lb.split()}
+    union = None
+    for m in masks.values():
+        union = m if union is None else np.logical_or(union, m)
+    coverage = None
+    if alpha is not None and union is not None and alpha.sum():
+        coverage = float(np.logical_and(union, alpha).sum()) / float(alpha.sum())
+    dup_blobs = 0
+    ms = list(masks.values())
+    for i in range(len(ms)):
+        for j in range(i + 1, len(ms)):
+            if _iou(ms[i], ms[j]) > 0.85:
+                dup_blobs += 1
+    checks = {
+        "E1_multi_region": len(kept) >= 2,
+        "E2_distinct_labels": len(set(labels)) == len(labels),
+        "E3_vocab_match": (not vocab) or bool(vocab_tokens & label_tokens),
+        "E4_coverage": (coverage is None) or coverage >= 0.55,
+        "E5_no_dup_blobs": dup_blobs == 0,
+    }
+    return {
+        "kept": len(kept), "dropped": len(dropped), "labels": labels,
+        "coverage": coverage, "latency_s": meta.get("latency_s"),
+        "refine_fallbacks": refine_fallbacks, "checks": checks,
+        "passed": all(checks.values()),
+    }
+
+
+def main_images(images_dir: str) -> int:
+    from pathlib import Path
+
+    from app.workers.cutout import call_photoroom
+
+    results = []
+    for f in sorted(Path(images_dir).glob("*.jpg")):
+        category = f.stem.split("__")[0].replace("_", " ")
+        cut_cache = f.with_suffix(".cutout.png")
+        try:
+            if cut_cache.exists():
+                cutout = cut_cache.read_bytes()
+            else:
+                cutout = call_photoroom(f.read_bytes())
+                cut_cache.write_bytes(cutout)
+            r = eval_file(f, cutout, category)
+        except Exception as exc:  # noqa: BLE001
+            r = {"error": str(exc)[:120], "passed": False, "checks": {}}
+        r["design"] = f.stem.split("__", 1)[-1]
+        r["category"] = category
+        results.append(r)
+        status = "PASS" if r["passed"] else "FAIL"
+        print(f"[{status}] {category:<12} {r['design'][:28]:<28} "
+              f"regions={r.get('kept', '?')} labels={r.get('labels', '?')} "
+              f"cov={f'{r['coverage']:.0%}' if r.get('coverage') is not None else 'n/a'}")
+    print("\n===== CORPUS SCORECARD =====")
+    n_pass = sum(1 for r in results if r["passed"])
+    print(f"{n_pass}/{len(results)} images meet ALL expectations")
+    for r in results:
+        if not r["passed"]:
+            bad = [c for c, ok in r.get("checks", {}).items() if not ok]
+            print(f"  FAIL {r['category']}/{r['design']}: {', '.join(bad) or r.get('error', '?')}")
     return 0 if n_pass == len(results) else 1
 
 
