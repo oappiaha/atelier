@@ -122,11 +122,8 @@ export default function Studies() {
             <div className="eyebrow" style={{ marginBottom: 4 }}>Every colorway study, one place</div>
             <div className="syne" style={{ fontSize: 28, fontWeight: 800 }}>Studies</div>
           </div>
-          {!isLoading && studies.length > 0 && (
-            <div className="mono rise" style={{ fontSize: 10, letterSpacing: '.12em', color: 'var(--faint)', animationDelay: '.06s' }}>
-              {studies.length} STUD{studies.length === 1 ? 'Y' : 'IES'}
-            </div>
-          )}
+          {/* no floating count up here — every design section right below
+             carries its own "N STUDIES · $x" caption */}
         </div>
 
         {isLoading ? (

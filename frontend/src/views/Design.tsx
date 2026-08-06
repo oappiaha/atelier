@@ -3,8 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   api,
-  PHASES, PHASE_LABELS, STATUS_CLASS, STATUS_LABELS,
-  type Design as DesignT, type Entry, type Media, type Phase, type Project as ProjectT,
+  PHASES, PHASE_LABELS, STATUS_CLASS, STATUS_LABELS, STATUSES,
+  type Design as DesignT, type DesignStatus, type Entry, type Media, type Phase, type Project as ProjectT,
 } from '../lib/api'
 import Lightbox from '../components/Lightbox'
 import { toast, useCapture, useShare } from '../lib/store'
@@ -238,6 +238,23 @@ export default function Design() {
   const heroSrc = heroShown ? (heroShown.thumb_lg_url ?? heroShown.url) : design.data?.cover_url ?? null
   const hero = useCrossfade(heroSrc)
 
+  // status picker: tap the status caption → chips → PATCH
+  const [statusPick, setStatusPick] = useState(false)
+  const statusM = useMutation({
+    mutationFn: (status: DesignStatus) =>
+      api<DesignT>(`/designs/${designId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }),
+    onSuccess: out => {
+      toast(`Status: ${STATUS_LABELS[out.status]}`)
+      setStatusPick(false)
+      qc.invalidateQueries({ queryKey: ['design', designId] })
+      qc.invalidateQueries({ queryKey: ['designs'] })
+    },
+    onError: () => toast('Could not change the status'),
+  })
+
   // delete product: destructive + final — entries/media/studies cascade
   const [confirmDelete, setConfirmDelete] = useState(false)
   const deleteDesignM = useMutation({
@@ -322,10 +339,36 @@ export default function Design() {
         </button>
         <div className="hdr" style={{ paddingTop: 12, alignItems: 'flex-start' }}>
           <div className="rise">
-            <div className={`dstatus ${d ? STATUS_CLASS[d.status] : 'st-dev'}`} style={{ marginBottom: 6 }}>
+            {/* tap the status line to change it — the picker chips PATCH */}
+            <button
+              className={`dstatus press ${d ? STATUS_CLASS[d.status] : 'st-dev'}`}
+              id="status-line"
+              style={{ marginBottom: 6 }}
+              title="Change status"
+              onClick={() => setStatusPick(p => !p)}
+            >
               <span className="dot" />
-              {d ? `${STATUS_LABELS[d.status]}${d.category ? ` · ${d.category}` : ''} · ${d.entry_count} entries · ${d.media_count} media` : '…'}
-            </div>
+              {/* entry/media counts live in the #dv-count caption by the
+                 Timeline/Media seg — the status line stays status + category */}
+              {d ? `${STATUS_LABELS[d.status]}${d.category ? ` · ${d.category}` : ''}` : '…'}
+              <svg width="9" height="9" viewBox="0 0 10 10" fill="none" style={{ marginLeft: 2 }}>
+                <path d="M2.5 4l2.5 2.5L7.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {statusPick && d && (
+              <div className="chips" style={{ marginBottom: 8 }} id="status-pick">
+                {STATUSES.map(s => (
+                  <button
+                    key={s}
+                    className={`chip${d.status === s ? ' on' : ''}`}
+                    disabled={statusM.isPending}
+                    onClick={() => statusM.mutate(s)}
+                  >
+                    {STATUS_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="syne" style={{ fontSize: 28, fontWeight: 800 }}>{d?.name ?? '…'}</div>
           </div>
           <button

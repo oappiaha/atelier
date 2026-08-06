@@ -203,7 +203,9 @@ export default function Gallery() {
       <div className="content">
         <div className="hdr">
           <div className="rise">
-            <div className="eyebrow" style={{ marginBottom: 4 }}>The answer to "what do you make?"</div>
+            {/* short enough that the Stack/Ring toggle keeps the top-right
+               slot on a 390px phone instead of wrapping under the title */}
+            <div className="eyebrow" style={{ marginBottom: 4 }}>"What do you make?"</div>
             <div className="syne" style={{ fontSize: 28, fontWeight: 800 }}>Gallery</div>
           </div>
           <div className="gal-toggle rise" style={{ animationDelay: '.06s' }}>

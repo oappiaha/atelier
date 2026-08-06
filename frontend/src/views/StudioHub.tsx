@@ -16,6 +16,7 @@ import {
   type Design, type Media, type StudyGalleryItem,
 } from '../lib/api'
 import { toast } from '../lib/store'
+import ScanOverlay from '../components/ScanOverlay'
 import { StudyCard } from './Studies'
 
 export default function StudioHub() {
@@ -266,43 +267,13 @@ export default function StudioHub() {
       )}
 
       {/* finding-regions: the wait made visible — scan sweep over the chosen
-          photo + honest step text. Dismissible: segmentation runs server-side
-          and its result is cached, so leaving is always safe. */}
-      {finding && !finding.hidden && createPortal(
-        <div className="cwlb" id="finding-regions">
-          <div className="cwlb-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
-            <div style={{ padding: '20px 18px', textAlign: 'center' }}>
-              <div className="scan-frame">
-                <img src={finding.photo.thumb_url ?? finding.photo.url} alt="" />
-                <div className="scan-grid" />
-                <div className="scan-beam" />
-                <div className="scan-dot" />
-                <div className="scan-dot d2" />
-                <div className="scan-dot d3" />
-                <div className="scan-corner tl" /><div className="scan-corner tr" />
-                <div className="scan-corner bl" /><div className="scan-corner br" />
-              </div>
-              <div className="syne" style={{ fontSize: 17, fontWeight: 800, marginTop: 14 }}>
-                Finding regions
-              </div>
-              <div className="mono scan-step" style={{ fontSize: 9.5, letterSpacing: '.08em', color: 'var(--fog)', marginTop: 6, minHeight: 14 }}>
-                {finding.step}
-              </div>
-              <div className="mono" style={{ fontSize: 8.5, color: 'var(--faint)', marginTop: 10, lineHeight: 1.7 }}>
-                USUALLY 10–20 SECONDS · SAFE TO KEEP BROWSING —<br />REGIONS ARE CACHED THE MOMENT THEY'RE READY
-              </div>
-              <button
-                className="kbtn gc-open press"
-                id="finding-hide"
-                style={{ width: 'auto', padding: '8px 14px', marginTop: 12 }}
-                onClick={() => setFinding(f => f && { ...f, hidden: true })}
-              >
-                KEEP BROWSING
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body,
+          photo + honest step text (shared with the composer's RE-SCAN). */}
+      {finding && !finding.hidden && (
+        <ScanOverlay
+          photoUrl={finding.photo.thumb_url ?? finding.photo.url}
+          step={finding.step}
+          onHide={() => setFinding(f => f && { ...f, hidden: true })}
+        />
       )}
     </div>
   )

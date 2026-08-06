@@ -13,8 +13,10 @@ import {
   type Region, type SlotIn, type Study,
 } from '../lib/api'
 import { toast } from '../lib/store'
+import { luminanceMaskSupported, toAlphaMask } from '../lib/alphaMask'
 import ContactSheet from '../components/ContactSheet'
 import PaletteDetail from '../components/PaletteDetail'
+import ScanOverlay from '../components/ScanOverlay'
 
 interface LocalSlot {
   label: string
@@ -90,9 +92,30 @@ export default function Studio() {
   const [slots, setSlots] = useState<LocalSlot[]>([])
   const [active, setActive] = useState(0)
   const [hoverRg, setHoverRg] = useState<string | null>(null)
+  // touch "hover": the ◉ peek control on a region row pins that region's
+  // highlight on the photo without painting it (no hover on touch screens)
+  const [pinRg, setPinRg] = useState<string | null>(null)
   const [estimate, setEstimate] = useState<Estimate | null>(null)
   const [maskDim, setMaskDim] = useState<{ w: number; h: number } | null>(null)
   const [loadedMasks, setLoadedMasks] = useState(0)
+
+  // iOS/WebKit treats raster masks as ALPHA regardless of mask-mode; the
+  // grayscale mask PNGs are fully opaque there ⇒ whole-photo blue wash.
+  // Without luminance support, swap in canvas-converted alpha-mask data URLs.
+  const lumOk = useMemo(() => luminanceMaskSupported(), [])
+  const [alphaMasks, setAlphaMasks] = useState<Record<string, string>>({})
+  const alphaStarted = useRef(new Set<string>())
+  useEffect(() => {
+    if (lumOk) return
+    const regs = regionsQ.data ?? []
+    for (const r of regs) {
+      if (alphaStarted.current.has(r.id)) continue
+      alphaStarted.current.add(r.id)
+      toAlphaMask(r.id, r.mask_url)
+        .then(url => setAlphaMasks(m => ({ ...m, [r.id]: url })))
+        .catch(() => alphaStarted.current.delete(r.id)) // overlay is decorative — skip quietly
+    }
+  }, [lumOk, regionsQ.data])
 
   const editSeq = useRef(0) // bumps on every local edit
   const errorSeq = useRef(-1) // last edit seq whose save 422'd (don't retry-loop)
@@ -203,6 +226,7 @@ export default function Studio() {
   }
 
   const tapRegion = (regionId: string) => {
+    setPinRg(null) // painting supersedes a pinned touch-preview
     if (study.data && study.data.status !== 'draft') {
       toast(`Slots are frozen — study is ${study.data.status}`)
       return
@@ -271,17 +295,29 @@ export default function Studio() {
   // RE-SCAN (2026-08-06): replace a poor segmentation (one-blob monochrome
   // sneaker, fur blobs). Destructive to the draft's slots — reload after.
   const [rescanning, setRescanning] = useState(false)
+  // the hub's finding-regions viewfinder, reused: step text + KEEP BROWSING
+  const [scanStep, setScanStep] = useState('')
+  const [scanHidden, setScanHidden] = useState(false)
   const rescan = async () => {
     if (!baseMediaId || rescanning) return
     setRescanning(true)
+    setScanHidden(false)
+    setScanStep('Cutting the product out of the background…')
     try {
       await rescanRegions(baseMediaId)
       toast('Re-scanning — regions will be replaced')
+      let ok = false
       for (let i = 0; i < 20; i++) {
+        setScanStep(i < 2
+          ? 'Cutting the product out of the background…'
+          : i < 6
+            ? 'Reading the product — panels, straps, hardware…'
+            : 'Refining region edges to the pixel…')
         await new Promise(r => setTimeout(r, 3000))
         const out = await segmentMedia(baseMediaId)
-        if (out.status === 'complete' && out.regions.length) break
+        if (out.status === 'complete' && out.regions.length) { ok = true; break }
       }
+      if (ok) setScanStep('Regions ready — reloading the composer…')
       navigate(0) // fresh regions ⇒ fresh composer state; repaint slots
     } catch (e) {
       toast(apiErrorDetail(e, 'Re-scan failed'))
@@ -322,7 +358,9 @@ export default function Studio() {
     () => [...regions].sort((a, b) => b.area_fraction - a.area_fraction),
     [regions],
   )
-  const hovered = hoverRg ? regions.find(r => r.id === hoverRg) ?? null : null
+  // mouse hover OR a pinned touch-preview both light a region up
+  const focusRg = hoverRg ?? pinRg
+  const hovered = focusRg ? regions.find(r => r.id === focusRg) ?? null : null
 
   const d = design.data
   const est = estimate
@@ -449,7 +487,10 @@ export default function Studio() {
                     {regions.map(r => {
                       const si = slotOfRegion.get(r.id)
                       const col = si !== undefined ? slotColor(si)?.hex ?? null : null
-                      const hot = hoverRg === r.id
+                      const hot = focusRg === r.id
+                      // no luminance support ⇒ only the converted alpha mask is
+                      // safe; the raw grayscale PNG would tint the WHOLE photo
+                      const maskUrl = lumOk ? r.mask_url : alphaMasks[r.id] ?? null
                       return (
                         <div
                           key={r.id}
@@ -457,8 +498,12 @@ export default function Studio() {
                           data-rg-ov={r.id}
                           style={{
                             background: hot ? 'var(--accent)' : col ?? 'transparent',
-                            WebkitMaskImage: `url(${JSON.stringify(r.mask_url)})`,
-                            maskImage: `url(${JSON.stringify(r.mask_url)})`,
+                            ...(maskUrl
+                              ? {
+                                  WebkitMaskImage: `url(${JSON.stringify(maskUrl)})`,
+                                  maskImage: `url(${JSON.stringify(maskUrl)})`,
+                                }
+                              : { visibility: 'hidden' as const }),
                           }}
                         />
                       )
@@ -554,13 +599,17 @@ export default function Studio() {
                 {regions.map(r => {
                   const si = slotOfRegion.get(r.id)
                   return (
-                    <button
+                    // div, not button: the ◉ peek control nests inside (buttons can't nest)
+                    <div
                       key={r.id}
                       className={`region-row${si !== undefined ? ' sel' : ''}`}
                       data-region-row={r.id}
+                      role="button"
+                      tabIndex={0}
                       onMouseEnter={() => setHoverRg(r.id)}
                       onMouseLeave={() => setHoverRg(null)}
                       onClick={() => tapRegion(r.id)}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tapRegion(r.id) } }}
                     >
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         <span className={`conf ${r.confidence >= 0.8 ? 'hi' : 'mid'}`} />
@@ -571,10 +620,27 @@ export default function Studio() {
                           {Math.round(r.confidence * 100)}%
                         </span>
                       </span>
-                      <span className={`rr-state ${si !== undefined ? 'sel' : 'none'}`}>
-                        {si !== undefined ? `SLOT ${si + 1}` : '—'}
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                        {/* touch "hover": pin this region's highlight on the photo
+                            without painting it; tap again (or paint) to clear */}
+                        <button
+                          className={`rg-peek${pinRg === r.id ? ' on' : ''}`}
+                          data-rg-peek={r.id}
+                          aria-label={`Preview ${r.label} on the photo`}
+                          aria-pressed={pinRg === r.id}
+                          title="Preview this region on the photo"
+                          onClick={e => {
+                            e.stopPropagation()
+                            setPinRg(p => (p === r.id ? null : r.id))
+                          }}
+                        >
+                          ◉
+                        </button>
+                        <span className={`rr-state ${si !== undefined ? 'sel' : 'none'}`}>
+                          {si !== undefined ? `SLOT ${si + 1}` : '—'}
+                        </span>
                       </span>
-                    </button>
+                    </div>
                   )
                 })}
                 <div className="mono" style={{ fontSize: 9, color: 'var(--faint)', lineHeight: 1.7, marginTop: 8 }}>
@@ -716,6 +782,15 @@ export default function Studio() {
             </div>
             </div>
           </>
+        )}
+        {/* RE-SCAN: the hub's finding-regions viewfinder over the base photo.
+            Dismissible — the scan keeps polling behind the composer. */}
+        {rescanning && !scanHidden && photo && (
+          <ScanOverlay
+            photoUrl={photo.thumb_url ?? photo.url}
+            step={scanStep}
+            onHide={() => setScanHidden(true)}
+          />
         )}
         {palDetailId && (
           <PaletteDetail

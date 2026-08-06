@@ -353,6 +353,13 @@ textarea.field{min-height:84px;resize:none;}
   transition:all .35s var(--ease);}
 .region-row:hover{transform:translateX(2px);border-color:var(--stroke-strong);}
 .region-row.sel{border-color:rgba(10,132,255,.35);background:rgba(10,132,255,.05);}
+/* touch "hover": ◉ pins a region's highlight on the photo without painting.
+   Subtle at rest, accent when latched; big enough to be a finger target. */
+.rg-peek{width:24px;height:24px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;font-size:11px;line-height:1;color:var(--faint);
+  transition:color .3s ease,background .3s ease;}
+.rg-peek:hover{color:var(--accent);background:var(--bg-deep);}
+.rg-peek.on{color:#FFF;background:var(--accent);}
 .rr-state{font-family:'DM Mono';font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;padding:5px 8px;
   border-radius:7px;flex-shrink:0;transition:background .3s var(--ease),color .3s var(--ease);}
 .rr-state.sel{background:var(--accent);color:#FFF;}
@@ -655,3 +662,43 @@ textarea.field{min-height:84px;resize:none;}
 .pald-simcard{border-radius:13px;padding:9px;border:1px solid var(--stroke);background:var(--card);
   text-align:left;cursor:pointer;min-width:0;}
 .pald-simcard:hover{border-color:var(--ink);box-shadow:var(--s1);}
+
+/* ── MOBILE HEADER AUDIT (Beezy: "the top of the screen looks busy") ──
+   Additive, phone-only rules — desktop (≥900px) keeps its exact look. */
+
+/* Project filter rows: one wrapper carries both chip rows. Desktop stacks
+   category over status exactly as before (gap 8 = the old marginBottom 8);
+   phones lead with the status row and park the category row behind the
+   CATEGORY toggle chip, so ONE chip row sits under the header by default. */
+.filter-rows{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;min-width:0;max-width:100%;}
+.filter-rows>*{min-width:0;}
+.cat-toggle{display:none;align-items:center;gap:5px;}
+.cat-toggle svg{transition:transform .3s var(--ease);}
+@media(max-width:899px){
+  .filter-rows{gap:6px;}
+  .filter-rows .cat-row{display:none;order:2;}
+  .filter-rows .cat-row.open{display:flex;}
+  .cat-toggle{display:inline-flex;}
+  .cat-row.open+.chips .cat-toggle svg{transform:rotate(180deg);}
+}
+
+@media(max-width:899px){
+  /* tighter header rhythm on phones: less dead air, chips hug the title */
+  .hdr{padding-bottom:10px;gap:10px;}
+  .chips{padding:3px 0;}
+  /* when the action block wraps under a long title, keep it flush RIGHT —
+     wrapped buttons drifting left is the "mixed directions" look */
+  .hdr>*+*{margin-left:auto;}
+  /* Gallery Stack/Ring toggle: compact enough to hold the top-right slot */
+  .gal-toggle .gal-mode{padding:8px 12px;}
+  /* Wada Studio (Studio.tsx JSX is owned by a parallel task — CSS only):
+     the STATUS · #ID · PALETTE caption stacked over two right-aligned keys
+     is the busiest corner in the app; the same facts live in the composer's
+     palette picker and the contact-sheet head, so the phone drops it. */
+  #study-status{display:none;}
+}
+@media(max-width:379px){
+  /* 320px worst case: header keys slim down so title + ONE key share a row */
+  .hdr .dup-btn{padding:9px 12px;font-size:9px;}
+  .hdr .gc-open{padding:8px 10px;}
+}

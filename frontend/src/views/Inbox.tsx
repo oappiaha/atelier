@@ -91,14 +91,13 @@ export default function Inbox() {
         </button>
         <header className="hdr rise">
           <div>
-            <div className="eyebrow">INBOX</div>
+            {/* the count rides the eyebrow — no dangling caption in the
+               top-right action slot */}
+            <div className="eyebrow">
+              INBOX{items?.length ? ` · ${items.length}` : ''}
+            </div>
             <div className="syne" style={{ fontSize: 26, fontWeight: 800, marginTop: 4 }}>Unsorted</div>
           </div>
-          {!!items?.length && (
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--faint)' }}>
-              {items.length} item{items.length === 1 ? '' : 's'}
-            </div>
-          )}
         </header>
 
         {isLoading ? (

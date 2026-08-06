@@ -20,6 +20,9 @@ export default function Project() {
   const openNewDesign = useNewDesign(s => s.openNewDesign)
   const [status, setStatus] = useState<'all' | DesignStatus>('all')
   const [category, setCategory] = useState<'all' | string>('all')
+  // mobile: the category row lives behind a small toggle chip so only ONE
+  // chip row sits under the header by default (desktop always shows both)
+  const [catOpen, setCatOpen] = useState(false)
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -67,8 +70,9 @@ export default function Project() {
         </button>
         <div className="hdr" style={{ paddingTop: 12 }}>
           <div className="rise">
+            {/* count lives in the "All · N" chip right below — don't say it twice */}
             <div className="eyebrow" style={{ marginBottom: 4 }}>
-              {project?.kicker ?? 'PROJECT'} · index of {all.data?.length ?? project?.design_count ?? '—'}
+              {project?.kicker ?? 'PROJECT'}
             </div>
             <div className="syne" style={{ fontSize: 28, fontWeight: 800 }}>
               {project?.name ?? '…'}
@@ -90,46 +94,67 @@ export default function Project() {
           )}
         </div>
 
-        {categories.length >= 2 && (
-          <div className="chips" style={{ marginBottom: 8 }} id="category-chips">
-            <button
-              className={`chip${catActive ? '' : ' on'}`}
-              data-cat="all"
-              onClick={() => setCategory('all')}
+        {/* desktop: category row over status row, as before. Mobile (≤899px):
+           the status row leads and the category row hides behind the CATEGORY
+           toggle chip — one chip row by default, never two pushing the grid
+           below the fold. An active category keeps its row visible. */}
+        <div className="filter-rows">
+          {categories.length >= 2 && (
+            <div
+              className={`chips cat-row${catOpen || catActive ? ' open' : ''}`}
+              id="category-chips"
             >
-              All
-            </button>
-            {categories.map(c => (
               <button
-                key={c}
-                className={`chip${category === c ? ' on' : ''}`}
-                data-cat={c}
-                onClick={() => setCategory(c)}
+                className={`chip${catActive ? '' : ' on'}`}
+                data-cat="all"
+                onClick={() => setCategory('all')}
               >
-                {c}
+                All
+              </button>
+              {categories.map(c => (
+                <button
+                  key={c}
+                  className={`chip${category === c ? ' on' : ''}`}
+                  data-cat={c}
+                  onClick={() => setCategory(c)}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="chips" id="status-chips">
+            {categories.length >= 2 && (
+              <button
+                className={`chip cat-toggle${catActive ? ' on' : ''}`}
+                id="cat-toggle"
+                onClick={() => setCatOpen(o => !o)}
+              >
+                {catActive ? category : 'Category'}
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                  <path d="M2.5 4l2.5 2.5L7.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            )}
+            <button
+              className={`chip${status === 'all' ? ' on' : ''}`}
+              data-f="all"
+              onClick={() => setStatus('all')}
+            >
+              All · {all.data?.length ?? 0}
+            </button>
+            {STATUSES.map(s => (
+              <button
+                key={s}
+                className={`chip${status === s ? ' on' : ''}`}
+                data-f={s}
+                onClick={() => setStatus(s)}
+              >
+                {STATUS_LABELS[s]} · {count(s)}
               </button>
             ))}
           </div>
-        )}
-
-        <div className="chips" style={{ marginBottom: 14 }}>
-          <button
-            className={`chip${status === 'all' ? ' on' : ''}`}
-            data-f="all"
-            onClick={() => setStatus('all')}
-          >
-            All · {all.data?.length ?? 0}
-          </button>
-          {STATUSES.map(s => (
-            <button
-              key={s}
-              className={`chip${status === s ? ' on' : ''}`}
-              data-f={s}
-              onClick={() => setStatus(s)}
-            >
-              {STATUS_LABELS[s]} · {count(s)}
-            </button>
-          ))}
         </div>
 
         {all.isLoading ? (
