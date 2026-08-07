@@ -73,8 +73,10 @@ def seg_prompt(category: str | None = None) -> str:
         "Give every region a DISTINCT, specific label — never repeat a label. "
         "At most 8 regions, no background.\n"
         'Output a JSON object with two keys. "subject": one of "single-product" '
-        '(one product photographed alone), "worn-on-model" (a person is wearing '
-        'it), or "multiple-items" (a collage or several products). "regions": a '
+        "(one product and NO visible person — garments shaped on an invisible "
+        'or ghost mannequin count as "single-product"), "worn-on-model" (a '
+        "visible human — any skin, hair, face or limbs — wears or holds it), or "
+        '"multiple-items" (a collage or several separate products). "regions": a '
         "list of segmentation masks where each entry contains the 2D bounding "
         'box in the key "box_2d" ([ymin, xmin, ymax, xmax] normalized to 0-1000), '
         'the segmentation mask in the key "mask" as a polygon of [x, y] '
