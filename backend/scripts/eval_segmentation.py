@@ -57,17 +57,18 @@ def eval_media(conn, s3, bucket: str, media_id: str, category: str | None) -> di
     # -> per-region GrabCut refinement. Only persistence is skipped.
     prompt = segmentation.seg_prompt(category)
     regions = None
-    for _attempt in range(2):  # the worker retries JSON-parse failures too
+    subject = None
+    for _attempt in range(3):  # mirror the worker: 1 + SEG_PARSE_RETRIES
         raw_text, meta = segmentation.call_gemini(
             img, get_settings().gemini_api_key, prompt=prompt
         )
         try:
-            regions = segmentation.parse_regions(raw_text)
+            subject, regions = segmentation.parse_response(raw_text)
             break
-        except Exception:  # noqa: BLE001, S112 — one retry, like SEG_PARSE_RETRIES
+        except Exception:  # noqa: BLE001, S112 — retries, like SEG_PARSE_RETRIES
             continue
     if regions is None:
-        raise RuntimeError("model output unparseable after retry")
+        raise RuntimeError("model output unparseable after retries")
     kept, dropped = segmentation.apply_drop_rules(regions)
 
     image_arr = np.asarray(img)
@@ -112,6 +113,7 @@ def eval_media(conn, s3, bucket: str, media_id: str, category: str | None) -> di
     return {
         "media_id": media_id,
         "category": category,
+        "subject": subject,
         "kept": len(kept),
         "dropped": len(dropped),
         "labels": labels,
@@ -211,17 +213,18 @@ def eval_file(path, cutout_bytes: bytes, category: str | None) -> dict:
     img, alpha = segmentation.working_image_and_alpha(cutout_bytes)
     prompt = segmentation.seg_prompt(category)
     regions = None
-    for _attempt in range(2):
+    subject = None
+    for _attempt in range(3):  # mirror the worker: 1 + SEG_PARSE_RETRIES
         raw_text, meta = segmentation.call_gemini(
             img, get_settings().gemini_api_key, prompt=prompt
         )
         try:
-            regions = segmentation.parse_regions(raw_text)
+            subject, regions = segmentation.parse_response(raw_text)
             break
         except Exception:  # noqa: BLE001, S112
             continue
     if regions is None:
-        raise RuntimeError("model output unparseable after retry")
+        raise RuntimeError("model output unparseable after retries")
     kept, dropped = segmentation.apply_drop_rules(regions)
     image_arr = np.asarray(img)
     masks = {}
@@ -256,9 +259,12 @@ def eval_file(path, cutout_bytes: bytes, category: str | None) -> dict:
         "E3_vocab_match": (not vocab) or bool(vocab_tokens & label_tokens),
         "E4_coverage": (coverage is None) or coverage >= 0.70,
         "E5_no_dup_blobs": dup_blobs == 0,
+        # corpus images are all flats: the fill decision hinges on this
+        "E6_subject": subject == "single-product",
     }
     return {
         "kept": len(kept), "dropped": len(dropped), "labels": labels,
+        "subject": subject,
         "coverage": coverage, "latency_s": meta.get("latency_s"),
         "refine_fallbacks": refine_fallbacks, "checks": checks,
         "passed": all(checks.values()),
@@ -288,7 +294,8 @@ def main_images(images_dir: str) -> int:
         results.append(r)
         status = "PASS" if r["passed"] else "FAIL"
         print(f"[{status}] {category:<12} {r['design'][:28]:<28} "
-              f"regions={r.get('kept', '?')} labels={r.get('labels', '?')} "
+              f"subject={r.get('subject', '?')} regions={r.get('kept', '?')} "
+              f"labels={r.get('labels', '?')} "
               f"cov={f'{r['coverage']:.0%}' if r.get('coverage') is not None else 'n/a'}")
     print("\n===== CORPUS SCORECARD =====")
     n_pass = sum(1 for r in results if r["passed"])
