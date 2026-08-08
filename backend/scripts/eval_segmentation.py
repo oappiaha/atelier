@@ -208,6 +208,29 @@ def main() -> int:
 # cutout alpha. Category comes from the filename: <category>__<slug>.jpg
 # ('fun_stuff' -> 'fun stuff').
 
+#: Corpus ground truth (verified by eye 2026-08-08): SSENSE photographs
+#: clothing ON MODELS — only bags/shoes/objects are true flats. The subject
+#: expectation and the coverage bar follow the truth, not a blanket guess.
+CORPUS_TRUTH: dict[str, str] = {
+    "adidas-f50-sneaker": "single-product",
+    "tabi-bianchetto-boots": "single-product",
+    "heel-less-heels": "single-product",
+    "elydea-pump": "single-product",
+    "rick-owens-clutch": "single-product",
+    "ferragamo-sofia": "single-product",
+    "jazz-midi-pink": "worn-on-model",
+    "jazz-midi-black": "worn-on-model",
+    "elmo-jeans": "worn-on-model",
+    "raw-jeans": "worn-on-model",
+    "fonda-leather": "worn-on-model",
+    "draculimo-down": "worn-on-model",
+    "military-shorts": "worn-on-model",
+    "mugler-tights": "worn-on-model",
+    "mouflage-tee": "worn-on-model",
+    "cicci-cap": "worn-on-model",
+}
+
+
 def eval_file(path, cutout_bytes: bytes, category: str | None) -> dict:
     del path  # category and bytes carry everything needed
     img, alpha = segmentation.working_image_and_alpha(cutout_bytes)
@@ -259,8 +282,6 @@ def eval_file(path, cutout_bytes: bytes, category: str | None) -> dict:
         "E3_vocab_match": (not vocab) or bool(vocab_tokens & label_tokens),
         "E4_coverage": (coverage is None) or coverage >= 0.70,
         "E5_no_dup_blobs": dup_blobs == 0,
-        # corpus images are all flats: the fill decision hinges on this
-        "E6_subject": subject == "single-product",
     }
     return {
         "kept": len(kept), "dropped": len(dropped), "labels": labels,
@@ -289,7 +310,16 @@ def main_images(images_dir: str) -> int:
             r = eval_file(f, cutout, category)
         except Exception as exc:  # noqa: BLE001
             r = {"error": str(exc)[:120], "passed": False, "checks": {}}
-        r["design"] = f.stem.split("__", 1)[-1]
+        slug = f.stem.split("__", 1)[-1]
+        truth = CORPUS_TRUTH.get(slug)
+        if truth and "checks" in r and r["checks"]:
+            r["checks"]["E6_subject"] = r.get("subject") == truth
+            if truth == "worn-on-model":
+                # coverage over a person+garment silhouette is not a model
+                # failure — the guard (correctly) never fills these
+                r["checks"].pop("E4_coverage", None)
+            r["passed"] = all(r["checks"].values())
+        r["design"] = slug
         r["category"] = category
         results.append(r)
         status = "PASS" if r["passed"] else "FAIL"
