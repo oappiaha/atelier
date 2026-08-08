@@ -429,3 +429,21 @@ def test_parse_response_subject_and_shapes():
     subject, regions = segmentation.parse_response(bad)
     assert subject == "single-product"
     assert regions[0].box_2d == [10, 10, 500, 500]
+
+
+def test_parse_response_person_visible_overrides_and_coerces():
+    from app.wada import segmentation
+
+    ghost = json.dumps({"subject": "worn-on-model", "person_visible": False,
+                        "regions": [{"box_2d": ["0", "0", "900", "900"],
+                                     "mask": [["0", "0"], ["0", "900"], ["900", "900"]],
+                                     "label": "bodice", "confidence": 0.9}]})
+    subject, regions = segmentation.parse_response(ghost)
+    assert subject == "single-product"  # pixel answer beats scene reading
+    assert regions[0].box_2d == [0, 0, 900, 900]  # string coords coerced
+
+    human = json.dumps({"subject": "single-product", "person_visible": True, "regions": []})
+    assert segmentation.parse_response(human)[0] == "worn-on-model"
+
+    collage = json.dumps({"subject": "multiple-items", "person_visible": False, "regions": []})
+    assert segmentation.parse_response(collage)[0] == "multiple-items"

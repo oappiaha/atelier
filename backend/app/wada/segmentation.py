@@ -76,7 +76,9 @@ def seg_prompt(category: str | None = None) -> str:
         "(one product and NO visible person — garments shaped on an invisible "
         'or ghost mannequin count as "single-product"), "worn-on-model" (a '
         "visible human — any skin, hair, face or limbs — wears or holds it), or "
-        '"multiple-items" (a collage or several separate products). "regions": a '
+        '"multiple-items" (a collage or several separate products). '
+        '"person_visible": true only if any human skin, hair, face or body '
+        'part is actually visible in the image, else false. "regions": a '
         "list of segmentation masks where each entry contains the 2D bounding "
         'box in the key "box_2d" ([ymin, xmin, ymax, xmax] normalized to 0-1000), '
         'the segmentation mask in the key "mask" as a polygon of [x, y] '
@@ -196,13 +198,35 @@ def parse_response(raw_text: str) -> tuple[str | None, list[RawRegion]]:
         subject = data.get("subject")
         if subject not in SUBJECTS:
             subject = None
+        # the model reads garment SHAPE as "worn" (ghost-mannequin flats came
+        # back worn-on-model no matter how the definitions were phrased) —
+        # but it answers the direct pixel question reliably. person_visible
+        # therefore OVERRIDES the scene reading in both directions.
+        person = data.get("person_visible")
+        if subject != "multiple-items":
+            if person is True:
+                subject = "worn-on-model"
+            elif person is False and subject == "worn-on-model":
+                subject = "single-product"
         data = data.get("regions", [])
     if not isinstance(data, list):
         raise ValueError("segmentation response has no regions list")  # noqa: TRY004 — parse errors are ValueErrors (retry contract)
     out: list[RawRegion] = []
     for entry in data:
         poly = entry.get("mask")
-        if not isinstance(poly, list) or len(poly) < 3:
+        if not isinstance(poly, list):
+            continue
+        # coerce vertices: the model occasionally emits string coordinates
+        # (corpus eval crashed on "100" / 1000); drop unusable vertices
+        clean = []
+        for p in poly:
+            if isinstance(p, (list, tuple)) and len(p) == 2:
+                try:
+                    clean.append([float(p[0]), float(p[1])])
+                except (TypeError, ValueError):
+                    continue
+        poly = clean
+        if len(poly) < 3:
             continue  # a region without a usable polygon can't become a mask
         box = entry.get("box_2d")
         if not isinstance(box, list) or len(box) != 4:
@@ -217,7 +241,7 @@ def parse_response(raw_text: str) -> tuple[str | None, list[RawRegion]]:
             RawRegion(
                 label=str(entry.get("label", "region")),
                 confidence=float(entry.get("confidence", 1.0)),
-                box_2d=[int(v) for v in box],
+                box_2d=[int(float(v)) for v in box],
                 polygon=poly,
             )
         )
