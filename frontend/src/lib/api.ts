@@ -656,3 +656,21 @@ export async function uploadMedia(file: Blob, opts: UploadOpts): Promise<Uploade
   })
   return { ...media, already_in_archive: u.duplicate_of !== null }
 }
+
+// ── Media download (2026-08-11): save any archive item to disk ──────────────
+
+/** Presigned attachment URL with a friendly filename
+ *  ("reis-bellypack-wada-1a2b3c.png"). Works for images AND audio. */
+export const downloadMedia = (mediaId: string) =>
+  api<{ download_url: string }>(`/media/${mediaId}/download`)
+
+/** Navigate a content-disposition: attachment URL — the browser downloads
+ *  the file without leaving the app. */
+export const triggerDownload = (url: string) => {
+  const a = document.createElement('a')
+  a.href = url
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}

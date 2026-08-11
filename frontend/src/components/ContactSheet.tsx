@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   apiErrorDetail, clearLegacyPins, colorwayAsCover, exportColorway, fetchColorways,
   generateOne, generateStudy, pinColorway, readLegacyPins,
-  rejectColorway, unpinColorway, unrejectColorway,
+  rejectColorway, triggerDownload, unpinColorway, unrejectColorway,
   CENTS_PER_CALL, EXPORT_REGEN_DOLLARS,
   type Colorway, type ColorwaysOut,
 } from '../lib/api'
@@ -24,17 +24,6 @@ const cents = (n: number) => `$${(n / 100).toFixed(2)}`
 /** Conservative per-ghost price tag: one call per chain step (= K slots),
  *  no cache discount — the same shape as the backend's enqueue gate. */
 const ghostCents = (cw: Colorway) => Math.round(cw.mapping.length * CENTS_PER_CALL)
-
-/** Presigned export URL carries content-disposition: attachment — navigating
- *  it downloads the PNG without leaving the app. */
-const triggerDownload = (url: string) => {
-  const a = document.createElement('a')
-  a.href = url
-  a.rel = 'noopener'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-}
 
 export default function ContactSheet({ studyId }: { studyId: string }) {
   const qc = useQueryClient()

@@ -5,6 +5,7 @@ the client uploads bytes DIRECTLY to storage, then POST /media/commit registers
 the object. sha256 is computed client-side and verified as the dedupe key.
 """
 
+import re
 import uuid
 from datetime import datetime
 
@@ -16,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import Ctx, get_ctx
 from app.db import get_session
 from app.routers.designs import PHASES
-from app.storage import object_exists, presign_get, presign_put
+from app.storage import object_exists, presign_download, presign_get, presign_put
 from app.workers.thumbs import enqueue_thumbs
 
 router = APIRouter(tags=["media"])
@@ -259,6 +260,56 @@ async def triage(
     ).one()
     await session.commit()
     return _media_out(row)
+
+
+# ── Download (2026-08-11, Beezy): save any archive item to disk ──────────────
+# GET /media/{id}/download → a presigned URL with content-disposition:
+# attachment and a friendly filename ("reis-bellypack-wada-1a2b3c.png"), so
+# wada colorway images (and everything else on the Media page) land in
+# Downloads with a name that means something. Images and audio both allowed.
+
+def _slugify(label: str) -> str:
+    # same shape as app.wada.segmentation.slugify — local copy keeps the hot
+    # media router free of the wada import chain (numpy/PIL)
+    return re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
+
+
+class DownloadOut(BaseModel):
+    download_url: str
+
+
+@router.get("/media/{media_id}/download", response_model=DownloadOut)
+async def download(
+    media_id: uuid.UUID,
+    ctx: Ctx = Depends(get_ctx),
+    session: AsyncSession = Depends(get_session),
+) -> DownloadOut:
+    row = (
+        await session.execute(
+            text(
+                """
+                SELECT m.id, m.kind, m.phase, m.source_app, m.r2_key,
+                       d.name AS design_name
+                FROM media m LEFT JOIN designs d ON d.id = m.design_id
+                WHERE m.id = :id AND m.workspace_id = :ws
+                """
+            ),
+            {"id": str(media_id), "ws": str(ctx.workspace_id)},
+        )
+    ).one_or_none()
+    if row is None:
+        raise HTTPException(404, "media not found")
+    # keys always carry a real extension (src/{ws}/{sha}.{ext}), but never
+    # trust that blindly — a keyless dot would produce garbage names
+    tail = row.r2_key.rsplit("/", 1)[-1]
+    ext = tail.rsplit(".", 1)[-1] if "." in tail else "bin"
+    parts = [
+        _slugify(row.design_name or "atelier"),
+        _slugify(row.source_app or row.phase or row.kind),
+        row.id.hex[:6],
+    ]
+    filename = "-".join(p for p in parts if p) + f".{ext}"
+    return DownloadOut(download_url=presign_download(row.r2_key, filename))
 
 
 # ── Studio Shot (2026-08-04, Beezy): PRESENTATION derivative on demand ───────

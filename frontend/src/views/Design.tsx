@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  api,
+  api, downloadMedia, triggerDownload,
   PHASES, PHASE_LABELS, STATUS_CLASS, STATUS_LABELS, STATUSES,
   type Design as DesignT, type DesignStatus, type Entry, type Media, type Phase, type Project as ProjectT,
 } from '../lib/api'
@@ -159,10 +159,35 @@ function MTile({
   delay: number
   onOpen: () => void
 }) {
+  const [dlBusy, setDlBusy] = useState(false)
+  // Hover-only corner control (mirrors .m-open) — on touch there's no hover,
+  // so the Lightbox's DOWNLOAD button is the path there.
+  const download = async (e: React.MouseEvent) => {
+    e.stopPropagation() // the tile itself opens the lightbox
+    if (dlBusy) return
+    setDlBusy(true)
+    try {
+      const out = await downloadMedia(media.id)
+      triggerDownload(out.download_url)
+    } catch {
+      toast('Download failed — try again')
+    } finally {
+      setDlBusy(false)
+    }
+  }
   return (
     <div className="m-tile" style={{ animationDelay: `${delay}s` }} onClick={onOpen}>
       <img className="m-art" src={media.thumb_url ?? media.url} alt={media.caption ?? media.phase ?? 'media'} />
       <div className="m-shine" />
+      <button
+        className="m-dl press"
+        aria-label="Download"
+        title="Save the original file to your device"
+        disabled={dlBusy}
+        onClick={download}
+      >
+        {dlBusy ? '…' : '⤓'}
+      </button>
       <div className="m-open">
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
           <path d="M2 8L8 2M8 2H4M8 2v4" stroke="#17181D" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />

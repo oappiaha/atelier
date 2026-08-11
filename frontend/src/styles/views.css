@@ -218,6 +218,14 @@ img.m-art{height:auto;min-height:90px;object-fit:cover;}
   opacity:0;transform:scale(.6) rotate(-30deg);transition:all .4s var(--spring);
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
 .m-tile:hover .m-open{opacity:1;transform:none;}
+/* tile download key — .m-open's mirror in the opposite corner. Hover-only by
+   design: on touch the Lightbox's DOWNLOAD button is the path. */
+.m-dl{position:absolute;top:8px;left:8px;width:24px;height:24px;border-radius:50%;
+  background:rgba(255,255,255,.9);color:#17181D;display:flex;align-items:center;justify-content:center;
+  font-size:12px;line-height:1;opacity:0;transform:scale(.6) rotate(30deg);transition:all .4s var(--spring);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
+.m-tile:hover .m-dl{opacity:1;transform:none;}
+.m-tile:hover .m-dl:disabled{opacity:.5;}
 
 /* ── SHEETS / LIGHTBOX ── */
 .sheet-wrap{position:fixed;inset:0;z-index:300;pointer-events:none;}
@@ -479,11 +487,12 @@ textarea.field{min-height:84px;resize:none;}
 .dz-open:hover{color:var(--warn);}
 .dz-go{color:#FFF;background:var(--warn);border-color:var(--warn);}
 
-/* studio-shot key in the lightbox meta strip */
-.lb-studio{margin-top:12px;font-size:9px;letter-spacing:.12em;padding:9px 14px;border-radius:999px;
+/* action keys in the lightbox meta strip (studio shot, download) */
+.lb-actions{display:flex;gap:8px;justify-content:center;margin-top:12px;}
+.lb-act{font-size:9px;letter-spacing:.12em;padding:9px 14px;border-radius:999px;
   color:#FFF;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);}
-.lb-studio:hover{background:rgba(255,255,255,.24);}
-.lb-studio:disabled{opacity:.5;cursor:default;}
+.lb-act:hover{background:rgba(255,255,255,.24);}
+.lb-act:disabled{opacity:.5;cursor:default;}
 
 /* base-photo picker grid (new-study "which photo?") */
 .base-pick-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}

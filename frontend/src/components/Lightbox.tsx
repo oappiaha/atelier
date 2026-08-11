@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { Media } from '../lib/api'
+import { downloadMedia, triggerDownload, type Media } from '../lib/api'
+import { toast } from '../lib/store'
 
 /** Full-screen media lightbox, per the mock's .lightbox block.
  *  All slides stay mounted (stable keys); navigation only moves transforms. */
@@ -22,6 +23,21 @@ export default function Lightbox({
   studioShotBusy?: boolean
 }) {
   const [idx, setIdx] = useState(Math.min(index, items.length - 1))
+  const [dlBusy, setDlBusy] = useState(false)
+
+  // Download is self-contained (no prop from the parent): every media item —
+  // image or audio, wada or plain capture — can be saved to disk.
+  const download = useCallback(async (m: Media) => {
+    setDlBusy(true)
+    try {
+      const out = await downloadMedia(m.id)
+      triggerDownload(out.download_url)
+    } catch {
+      toast('Download failed — try again')
+    } finally {
+      setDlBusy(false)
+    }
+  }, [])
 
   const go = useCallback(
     (d: number) => setIdx(i => Math.max(0, Math.min(items.length - 1, i + d))),
@@ -85,17 +101,28 @@ export default function Lightbox({
         <div className="mono" style={{ fontSize: 9.5, color: 'rgba(255,255,255,.42)', marginTop: 8 }}>
           <span id="lb-idx">{idx + 1}</span> / <span id="lb-total">{items.length}</span> · swipe or tap edges
         </div>
-        {onStudioShot && cur.kind === 'image' && cur.source_app !== 'photoroom' && (
+        <div className="lb-actions">
+          {onStudioShot && cur.kind === 'image' && cur.source_app !== 'photoroom' && (
+            <button
+              className="lb-act mono press"
+              id="lb-studio-shot"
+              disabled={studioShotBusy}
+              title="PhotoRoom: background removed + AI soft shadow, saved to the timeline (~$0.02)"
+              onClick={() => onStudioShot(cur)}
+            >
+              {studioShotBusy ? 'SHOOTING…' : '◐ STUDIO SHOT · ~$0.02'}
+            </button>
+          )}
           <button
-            className="lb-studio mono press"
-            id="lb-studio-shot"
-            disabled={studioShotBusy}
-            title="PhotoRoom: background removed + AI soft shadow, saved to the timeline (~$0.02)"
-            onClick={() => onStudioShot(cur)}
+            className="lb-act mono press"
+            id="lb-download"
+            disabled={dlBusy}
+            title="Save the original file to your device"
+            onClick={() => download(cur)}
           >
-            {studioShotBusy ? 'SHOOTING…' : '◐ STUDIO SHOT · ~$0.02'}
+            {dlBusy ? 'FETCHING…' : '⤓ DOWNLOAD'}
           </button>
-        )}
+        </div>
       </div>
     </div>
   )
