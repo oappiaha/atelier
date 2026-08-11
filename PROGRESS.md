@@ -194,6 +194,29 @@ cache keys stay true to painted pixels and replays remain 100% cache hits
 included). Large residual fraction is logged as a segmentation-quality
 signal. Suite 220 (9 new in `tests/test_coverage.py`).
 
+## Segmentation quality arc (2026-08-05..08)
+
+- **Eval harness** `backend/scripts/eval_segmentation.py`: full-pipeline
+  (cutout→prompt→Gemini→parse→refine→coverage) scorecard over archive media
+  (cohorts: product vs moodboard, E1..E6) or a local corpus (`--images`,
+  16 SSENSE product shots on the droplet at /opt/atelier/eval-images with
+  cached cutouts). Bar E4=70% mirrors the compositor growth-guard.
+- **Pipeline upgrades it drove** (each A/B'd on the corpus): prompt v2..v4
+  (product-general + category vocabulary via designs.category; SEG_VOCAB),
+  Gemini native JSON mode (black-leather 2%→80% coverage), malformed
+  box/string-coord tolerance, label dedupe ('sleeves 2'), subject
+  classification (single-product / worn-on-model / multiple-items, mig 0007
+  media.seg_subject) with person_visible pixel-question override.
+- **Fill guard v2** (generate.py): single-product bases always fill to 100%
+  of the silhouette; worn-on-model/collage never auto-fill (skin protected);
+  legacy scans keep the 30%-residual rule.
+- **Final corpus verdict**: 12/16 all-expectations pass; flats 88–98%
+  coverage; subject classifier 16/16 correct (SSENSE clothing is on-model —
+  eval ground truth was corrected, not the model). Residual known issues:
+  ~1-3 stochastic unparseable responses per 16-scan run (worker retries
+  cover it; structured-output schema is the next lever), flat-lay garments
+  untested (need Beezy's manufacturing shots).
+
 ## Studio UX pass (2026-07-31)
 
 - **Trapped-fixed-overlay bug (root cause of "lightbox opens mid-page" and
