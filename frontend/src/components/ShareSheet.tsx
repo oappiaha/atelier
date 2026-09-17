@@ -1,21 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useDialog } from '../lib/dialog'
 import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
-import { mintShare, SCOPE_LABELS, SCOPES, type ShareScope } from '../lib/api'
+import { mintShare, SCOPE_LABELS, SCOPES } from '../lib/api'
 import { toast, useShare } from '../lib/store'
 
 /** Share sheet per the mock's #sheet-share: a view-only public link + Copy.
  *  Minting is idempotent per target+scope (backend returns the live link),
  *  so re-opening the sheet always shows the same URL. */
 export default function ShareSheet() {
-  const { open, target, closeShare } = useShare()
-  const [scope, setScope] = useState<ShareScope>('finals')
-
-  // reset to the PRD A8 default ("Finals only") on every open
-  useEffect(() => {
-    if (open) setScope('finals')
-  }, [open])
-
+  const { open, target, closeShare, scope, setScope } = useShare()
   const link = useQuery({
     queryKey: ['share', target?.kind, target?.id, scope],
     queryFn: () =>
@@ -39,14 +32,17 @@ export default function ShareSheet() {
     }
   }
 
+  useDialog('sheet-share', open, () => { closeShare() })
+
   // portaled to <body> so a transformed ancestor can't trap the fixed sheet
   return createPortal(
-    <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-share">
+    <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-share" inert={!open} role="dialog" aria-modal="true" aria-label="Share">
       <div className="backdrop" onClick={closeShare} />
       <div className="sheet">
         <div className="grabber" />
+        <button className="sheet-close chip" aria-label="Close" onClick={closeShare}>Close</button>
         <div className="syne" style={{ fontSize: 18, fontWeight: 700, marginBottom: 3 }}>
-          Share gallery
+          Share {target?.kind ?? 'design'}
         </div>
         <div style={{ fontSize: 12, color: 'var(--fog)' }}>
           A view-only link{target ? ` for ${target.name}` : ''}. No login for whoever you send it to.

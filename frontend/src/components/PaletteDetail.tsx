@@ -1,3 +1,4 @@
+import { useDialog } from '../lib/dialog'
 // WADA STUDIO — Palette detail (M8, PRD W3 "browsable" + TDD §9
 // GET /palettes/{id} "Detail + similar"). Full swatch anatomy (name, hex,
 // CIELAB, hue family, chroma), palette-level facts (temperature, mean L*,
@@ -21,6 +22,7 @@ export default function PaletteDetail({
   onUse: (id: string) => void
   onClose: () => void
 }) {
+  useDialog('pal-detail', true, onClose)
   // similar-palette taps navigate WITHIN the sheet
   const [shownId, setShownId] = useState(paletteId)
   const q = useQuery({
@@ -32,7 +34,7 @@ export default function PaletteDetail({
 
   // portaled to <body>: a transformed ancestor would trap this fixed overlay
   return createPortal(
-    <div className="cwlb" id="pal-detail" onClick={onClose}>
+    <div className="cwlb" id="pal-detail" role="dialog" aria-modal="true" aria-label="Palette details" onClick={onClose}>
       <div className="cwlb-body pald-body" onClick={e => e.stopPropagation()}>
         <button className="cwlb-close press" aria-label="Close" title="Close" onClick={onClose}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">

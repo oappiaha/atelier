@@ -6,6 +6,7 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { apiErrorDetail, deleteStudy, fetchStudies, type StudyGalleryItem } from '../lib/api'
+import { usePanel } from '../lib/panel'
 import { toast } from '../lib/store'
 
 const fmtDate = (iso: string) =>
@@ -88,6 +89,7 @@ export default function Studies() {
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['studies'], queryFn: fetchStudies })
   const studies = data ?? []
+  usePanel([{ primary: true, label: 'Choose a design', run: () => navigate('/') }])
 
   // drafts are free to delete; generated studies are spend records (API 409s)
   const deleteM = useMutation({

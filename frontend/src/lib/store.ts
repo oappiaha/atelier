@@ -66,6 +66,8 @@ export interface ShareTarget {
 }
 
 interface ShareState {
+  scope: 'finals' | 'full'
+  setScope: (scope: 'finals' | 'full') => void
   open: boolean
   target: ShareTarget | null
   openShare: (target: ShareTarget) => void
@@ -73,11 +75,13 @@ interface ShareState {
 }
 
 export const useShare = create<ShareState>(set => ({
+  scope: 'finals',
+  setScope: scope => set({ scope }),
   open: false,
   target: null,
   openShare: target => {
     closeOtherSheets('share')
-    set({ open: true, target })
+    set({ open: true, target, scope: 'finals' })
   },
   closeShare: () => set({ open: false }),
 }))

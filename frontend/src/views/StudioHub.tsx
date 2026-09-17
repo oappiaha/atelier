@@ -15,13 +15,16 @@ import {
   rememberStudy, segmentMedia, DEFAULT_PALETTE_ID,
   type Design, type Media, type StudyGalleryItem,
 } from '../lib/api'
-import { toast } from '../lib/store'
+import { usePanel, useJourney } from '../lib/panel'
+import { useDialog } from '../lib/dialog'
+import { toast, useCapture } from '../lib/store'
 import ScanOverlay from '../components/ScanOverlay'
 import { StudyCard } from './Studies'
 
 export default function StudioHub() {
   const { designId } = useParams()
   const navigate = useNavigate()
+  const journey = useJourney()
   const qc = useQueryClient()
 
   const design = useQuery({
@@ -50,7 +53,7 @@ export default function StudioHub() {
   // the finding-regions overlay: which photo is being scanned + step text.
   // hidden=true keeps the loop running without the overlay ("keep browsing")
   const [finding, setFinding] = useState<{ photo: Media; step: string; hidden: boolean } | null>(null)
-  const openStudy = (s: StudyGalleryItem) => navigate(`/d/${designId}/study/${s.id}`)
+  const openStudy = (s: StudyGalleryItem) => navigate(`/d/${designId}/study/${s.id}`, { state: journey.state })
 
   // study bases: real photos AND photoroom studio shots (clean, centered —
   // the pipeline makes its own cutout of whatever base is chosen). Only wada
@@ -109,7 +112,7 @@ export default function StudioHub() {
       })
       rememberStudy(designId, s.id)
       qc.invalidateQueries({ queryKey: ['studies'] })
-      navigate(`/d/${designId}/study/${s.id}`)
+      navigate(`/d/${designId}/study/${s.id}`, { state: journey.state })
     } catch (e) {
       toast(apiErrorDetail(e, 'Could not open the studio'))
     } finally {
@@ -125,7 +128,7 @@ export default function StudioHub() {
     if (emptyDraft) {
       toast('Resuming your open draft')
       rememberStudy(designId, emptyDraft.id)
-      navigate(`/d/${designId}/study/${emptyDraft.id}`)
+      navigate(`/d/${designId}/study/${emptyDraft.id}`, { state: journey.state })
       return
     }
     if (!photos.length) {
@@ -145,6 +148,15 @@ export default function StudioHub() {
     onError: e => toast(apiErrorDetail(e, 'Could not delete the draft')),
   })
 
+  useDialog('base-picker', picking, () => setPicking(false))
+  usePanel([
+    { label: 'Back to design', run: () => navigate(`/d/${designId}`, { state: journey.state }) },
+    { primary: true, label: opening ? 'Opening…' : 'New study', disabled: opening || studiesQ.isPending || media.isPending || !design.data || (!emptyDraft && !photos.length), run: newStudy },
+    { label: 'More', children: [
+      { label: 'All studies', run: () => navigate('/studies') },
+      { label: 'Add to design', disabled: !design.data, run: useCapture.getState().openCapture },
+    ] },
+  ])
   const d = design.data
   const generated = mine.filter(s => s.status !== 'draft')
   const drafts = mine.filter(s => s.status === 'draft')
@@ -152,7 +164,7 @@ export default function StudioHub() {
   return (
     <div className="view">
       <div className="content">
-        <button className="back-inline press" onClick={() => navigate(`/d/${designId}`)}>
+        <button className="back-inline press" onClick={() => navigate(`/d/${designId}`, { state: journey.state })}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
             <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -170,7 +182,7 @@ export default function StudioHub() {
             <button
               className="kbtn gc-open press dup-btn"
               id="hub-new-study"
-              disabled={opening}
+              disabled={opening || studiesQ.isPending || media.isPending || !design.data || (!emptyDraft && !photos.length)}
               onClick={newStudy}
             >
               {opening ? 'OPENING…' : emptyDraft ? '▸ RESUME DRAFT' : '＋ NEW STUDY'}
@@ -186,7 +198,7 @@ export default function StudioHub() {
           <div className="panel rise" style={{ padding: 24, marginTop: 10 }}>
             <div className="syne" style={{ fontSize: 16, fontWeight: 700 }}>No studies yet</div>
             <p style={{ fontSize: 12.5, color: 'var(--fog)', marginTop: 6, lineHeight: 1.6 }}>
-              Start one — pick regions on a product photo, paint them into slots,
+              {!photos.length ? 'Add a product photo to this design first. Then pick regions, paint them into slots,' : 'Start one — pick regions on a product photo, paint them into slots,'}
               and generate colorways.
             </p>
           </div>

@@ -5,7 +5,9 @@ import {
   api, fetchInbox, triageMedia,
   PHASE_LABELS, type Design, type Media, type Phase, type Project,
 } from '../lib/api'
-import { toast } from '../lib/store'
+import { usePanel } from '../lib/panel'
+import { useDialog } from '../lib/dialog'
+import { toast, useCapture } from '../lib/store'
 
 /** Phases an inbox capture can be triaged onto (PRD A5: "into any design").
  *  Images get the visual phases (share-target lands as Inspiration → default);
@@ -78,6 +80,13 @@ export default function Inbox() {
     }
   }
 
+  useDialog('sheet-triage', !!sel, closeTriage)
+  usePanel([
+    { label: 'Archive', run: () => navigate('/') },
+    { primary: true, label: 'Sort next', disabled: !items?.length || busy, run: () => items?.[0] && openTriage(items[0]) },
+    { label: 'Capture', run: useCapture.getState().openCapture },
+  ])
+
   const phases = sel?.kind === 'audio' ? AUDIO_PHASES : IMAGE_PHASES
 
   return (
@@ -140,7 +149,7 @@ export default function Inbox() {
       </div>
 
       {/* triage sheet — mock sheet idiom */}
-      <div className={`sheet-wrap${sel ? ' open' : ''}`} id="sheet-triage">
+      <div className={`sheet-wrap${sel ? ' open' : ''}`} id="sheet-triage" role="dialog" aria-modal="true" aria-label="Sort into a design" inert={!sel}>
         <div className="backdrop" onClick={closeTriage} />
         <div className="sheet">
           <div className="grabber" />

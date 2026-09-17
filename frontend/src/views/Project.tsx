@@ -5,7 +5,8 @@ import {
   api, STATUSES, STATUS_CLASS, STATUS_LABELS,
   type Design, type DesignStatus, type Project as ProjectT,
 } from '../lib/api'
-import { useNewDesign, useShare } from '../lib/store'
+import { usePanel, useJourney } from '../lib/panel'
+import { useCapture, useNewDesign, useShare } from '../lib/store'
 
 const FALLBACK_ART = 'linear-gradient(150deg,#DCE4EE,#B9C6D8 55%,#8FA2BC)'
 
@@ -16,6 +17,7 @@ const titleCase = (s: string) =>
 export default function Project() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+  const journey = useJourney()
   const openShare = useShare(s => s.openShare)
   const openNewDesign = useNewDesign(s => s.openNewDesign)
   const [status, setStatus] = useState<'all' | DesignStatus>('all')
@@ -59,6 +61,15 @@ export default function Project() {
     : byStatus
   const count = (s: DesignStatus) => all.data?.filter(d => d.status === s).length ?? 0
 
+  usePanel([
+    { label: 'All projects', run: () => navigate('/') },
+    { primary: true, label: 'New design', disabled: !project, run: () => project && openNewDesign(project) },
+    { label: 'More', children: [
+      { label: 'Share project', disabled: !project, run: () => project && openShare({ kind: 'project', ...project }) },
+      { label: 'Capture to Inbox', run: useCapture.getState().openCapture },
+    ] },
+  ])
+
   return (
     <div className="view">
       <div className="content">
@@ -81,7 +92,7 @@ export default function Project() {
           {project && (
             <button
               className="glassbtn press rise"
-              aria-label="Share"
+              aria-label="Share project"
               id="project-share"
               style={{ width: 40, height: 40, animationDelay: '.06s' }}
               onClick={() => openShare({ kind: 'project', id: project.id, name: project.name })}
@@ -172,13 +183,13 @@ export default function Project() {
                correct per TDD §10.2. Within a filter, cards keep stable uuid keys. */}
             <div className="dgrid" id="dgrid" key={`${status}:${catActive ? category : 'all'}`}>
               {designs?.map((d, k) => (
-                <div
+                <button
                   key={d.id}
                   className="dcard"
                   // cap the stagger: with 100+ designs an uncapped k*0.06s left
                   // the last card invisible for 6+ seconds
                   style={{ animation: 'tileIn .55s var(--ease) backwards', animationDelay: `${Math.min(k, 11) * 0.05}s` }}
-                  onClick={() => navigate(`/d/${d.id}`)}
+                  onClick={() => journey.openDesign(d.id, project?.name ?? 'Project')}
                 >
                   <div className="card-idx">{String(d.index_no).padStart(3, '0')}</div>
                   <div className="art" style={d.cover_url ? undefined : { background: FALLBACK_ART }}>
@@ -195,7 +206,7 @@ export default function Project() {
                       {STATUS_LABELS[d.status]}
                     </div>
                   </div>
-                </div>
+                </button>
               ))}
               {project && (
                 <button

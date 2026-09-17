@@ -12,7 +12,8 @@ import {
   type Design as DesignT, type Estimate, type Media, type Palette,
   type Region, type SlotIn, type Study,
 } from '../lib/api'
-import { toast } from '../lib/store'
+import { usePanel, useJourney } from '../lib/panel'
+import { toast, useCapture } from '../lib/store'
 import { luminanceMaskSupported, toAlphaMask } from '../lib/alphaMask'
 import ContactSheet from '../components/ContactSheet'
 import PaletteDetail from '../components/PaletteDetail'
@@ -38,6 +39,8 @@ const fmtEta = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `
 export default function Studio() {
   const { designId, studyId } = useParams<{ designId: string; studyId: string }>()
   const navigate = useNavigate()
+  const journey = useJourney()
+
   const qc = useQueryClient()
 
   // ── server state ───────────────────────────────────────────────────────────
@@ -51,6 +54,14 @@ export default function Studio() {
     queryFn: () => api<DesignT>(`/designs/${designId}`),
     enabled: !!designId,
   })
+  usePanel([
+    { label: 'Studio hub', run: () => navigate(`/d/${designId}/studio`, { state: journey.state }) },
+    { label: 'Back to design', run: () => navigate(`/d/${designId}`, { state: journey.state }) },
+    { label: 'More', children: [
+      { label: 'All studies', run: () => navigate('/studies') },
+      { label: 'Add to design', disabled: !design.data, run: useCapture.getState().openCapture },
+    ] },
+  ])
   const media = useQuery({
     queryKey: ['media', designId],
     queryFn: () => api<Media[]>(`/designs/${designId}/media`),
@@ -331,7 +342,7 @@ export default function Studio() {
       qc.setQueryData(['study', ns.id], ns)
       qc.invalidateQueries({ queryKey: ['studies', designId] })
       toast('New draft — slots & palette carried over')
-      navigate(`/d/${designId}/study/${ns.id}`)
+      navigate(`/d/${designId}/study/${ns.id}`, { state: journey.state })
     },
     onError: e => toast(apiErrorDetail(e, 'Could not duplicate the study')),
   })
@@ -368,7 +379,7 @@ export default function Studio() {
   return (
     <div className="view">
       <div className="content">
-        <button className="back-inline press" onClick={() => navigate(`/d/${designId}`)}>
+        <button className="back-inline press" onClick={() => navigate(`/d/${designId}`, { state: journey.state })}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
             <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -392,7 +403,7 @@ export default function Studio() {
                 id="study-hub-link"
                 style={{ width: 'auto' }}
                 title="All studies for this product"
-                onClick={() => navigate(`/d/${designId}/studio`)}
+                onClick={() => navigate(`/d/${designId}/studio`, { state: journey.state })}
               >
                 ⊞ ALL STUDIES
               </button>

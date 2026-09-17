@@ -1,3 +1,4 @@
+import { useDialog } from '../lib/dialog'
 // FINDING-REGIONS SCAN OVERLAY — the segmentation wait made visible: scan
 // sweep over the photo + honest step text. Extracted verbatim from StudioHub
 // so the composer's RE-SCAN shows the same viewfinder. Dismissible: the scan
@@ -12,8 +13,9 @@ export default function ScanOverlay({
   step: string
   onHide: () => void
 }) {
+  useDialog('finding-regions', true, onHide)
   return createPortal(
-    <div className="cwlb" id="finding-regions">
+    <div className="cwlb" id="finding-regions" role="dialog" aria-modal="true" aria-label="Finding regions">
       <div className="cwlb-body" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
         <div style={{ padding: '20px 18px', textAlign: 'center' }}>
           <div className="scan-frame">

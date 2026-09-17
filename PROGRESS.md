@@ -292,3 +292,9 @@ cd backend && .venv/bin/python -m pytest      # 67 tests, isolated infra
 - PhotoRoom API key (sandbox tier fine for dev) → background-removal pipeline.
 - Product calls on the dedupe/share-target semantics above before M4, and on
   whether PhotoRoom runs on all uploads or only final/editorial + on-demand.
+
+## 2026-09-17 — Contextual panel (locally verified)
+
+Replaced the fixed Archive/Capture/Gallery mobile bar with screen-owned actions above stable Archive/Gallery/Studies destinations. Added equivalent desktop actions, origin-aware design returns, retained Gallery mode/filter/focused media/scroll, explicit design/project share targeting, nested Studio capture context, and empty/loading/busy guards. Sheets and viewers take keyboard ownership; the dock hides under overlays/editing, long labels stay compact, and New design preserves autofocus and prevents dismissal/duplicate submission while saving.
+
+Verification: frontend lint/build passed; all five scripts in frontend/tests/browser passed against isolated Vite with intercepted sample API data. Includes 21 route/viewport combinations, correct create/share/triage payloads and read-back, capture context, auth redirect, empty states, Ring project selection, scope reset, focus restoration, delayed save and repeated Gallery scroll. No backend changes or production data mutations. This round is local only; no push/deploy. See docs/plans/2026-09-17-contextual-panel.md for evidence and limitations.

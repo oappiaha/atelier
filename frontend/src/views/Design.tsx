@@ -7,6 +7,7 @@ import {
   type Design as DesignT, type DesignStatus, type Entry, type Media, type Phase, type Project as ProjectT,
 } from '../lib/api'
 import Lightbox from '../components/Lightbox'
+import { usePanel, useJourney } from '../lib/panel'
 import { toast, useCapture, useShare } from '../lib/store'
 
 type PhaseFilter = 'all' | Phase
@@ -210,7 +211,7 @@ export default function Design() {
   const { designId } = useParams<{ designId: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
-  const setDesignCtx = useCapture(s => s.setDesignCtx)
+  const journey = useJourney()
   const openShare = useShare(s => s.openShare)
 
   const design = useQuery({
@@ -229,18 +230,12 @@ export default function Design() {
     queryKey: ['projects'],
     queryFn: () => api<ProjectT[]>('/projects'),
   })
-  const projectName = projects?.find(p => p.id === design.data?.project_id)?.name ?? 'Back'
+  const projectName = projects?.find(p => p.id === design.data?.project_id)?.name ?? 'Archive'
 
   const [view, setView] = useState<'timeline' | 'media'>('timeline')
   const [phase, setPhase] = useState<PhaseFilter>('all')
   const [heroIdx, setHeroIdx] = useState(0)
   const [lb, setLb] = useState<LbState>(null)
-
-  // register this design as the capture destination
-  useEffect(() => {
-    if (design.data) setDesignCtx({ id: design.data.id, name: design.data.name })
-    return () => setDesignCtx(null)
-  }, [design.data, setDesignCtx])
 
   // hero rail: the CHOSEN cover leads, real photos before wada colorway
   // media (explorations shouldn't hijack the product's face — Beezy
@@ -346,21 +341,30 @@ export default function Design() {
   // studies + one deliberate NEW STUDY key). The old behaviour — silently
   // creating a draft on every tap without a localStorage memo — minted
   // duplicate empty drafts on every new device.
-  const openStudio = () => designId && navigate(`/d/${designId}/studio`)
+  const openStudio = () => designId && navigate(`/d/${designId}/studio`, { state: journey.state })
 
   const d = design.data
+  usePanel([
+    { label: `Back to ${journey.backLabel ?? projectName}`, run: () => journey.back(d?.project_id) },
+    { primary: true, label: 'Add to design', disabled: !d, run: useCapture.getState().openCapture },
+    { label: 'More', disabled: !d, children: [
+      { label: 'Share design', run: () => d && openShare({ kind: 'design', id: d.id, name: d.name }) },
+      { label: 'Studio', run: openStudio },
+      { label: view === 'timeline' ? 'Show media' : 'Show timeline', run: () => setView(view === 'timeline' ? 'media' : 'timeline') },
+    ] },
+  ])
 
   return (
     <div className="view">
       <div className="content">
         <button
           className="back-inline press"
-          onClick={() => (d ? navigate(`/p/${d.project_id}`) : navigate('/'))}
+          onClick={() => journey.back(d?.project_id)}
         >
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
             <path d="M9 3L5 7l4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          {projectName}
+          {journey.backLabel ?? projectName}
         </button>
         <div className="hdr" style={{ paddingTop: 12, alignItems: 'flex-start' }}>
           <div className="rise">
@@ -398,7 +402,7 @@ export default function Design() {
           </div>
           <button
             className="glassbtn press rise"
-            aria-label="Share"
+            aria-label="Share design"
             style={{ width: 40, height: 40, animationDelay: '.06s' }}
             onClick={() =>
               d ? openShare({ kind: 'design', id: d.id, name: d.name }) : toast('Still loading…')

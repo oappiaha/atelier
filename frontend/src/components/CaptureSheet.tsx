@@ -1,3 +1,4 @@
+import { useDialog } from '../lib/dialog'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -182,14 +183,17 @@ export default function CaptureSheet() {
 
   const moodSel = moodFiles.filter(m => m.sel)
 
+  useDialog('sheet-capture', open, () => { if (!busy) closeCapture() })
+
   // portaled to <body>: a transformed ancestor (e.g. a .rise entry animation)
   // would otherwise become the containing block for this fixed sheet and
   // anchor it to the wrong box instead of the viewport bottom
   return createPortal(
-    <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-capture">
-      <div className="backdrop" onClick={closeCapture} />
+    <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-capture" inert={!open} role="dialog" aria-modal="true" aria-label="Capture">
+      <div className="backdrop" onClick={() => { if (!busy) closeCapture() }} />
       <div className="sheet">
         <div className="grabber" />
+        <button className="sheet-close chip" aria-label="Close" disabled={busy} onClick={closeCapture}>Close</button>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
           <div className="syne" style={{ fontSize: 18, fontWeight: 700 }}>
             {mode === 'menu' ? 'Capture'

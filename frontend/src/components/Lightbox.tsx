@@ -1,3 +1,4 @@
+import { useDialog } from '../lib/dialog'
 import { useCallback, useEffect, useState } from 'react'
 import { downloadMedia, triggerDownload, type Media } from '../lib/api'
 import { toast } from '../lib/store'
@@ -22,6 +23,7 @@ export default function Lightbox({
   onStudioShot?: (m: Media) => void
   studioShotBusy?: boolean
 }) {
+  useDialog('lightbox', true, onClose)
   const [idx, setIdx] = useState(Math.min(index, items.length - 1))
   const [dlBusy, setDlBusy] = useState(false)
 
@@ -48,7 +50,6 @@ export default function Lightbox({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') go(1)
       if (e.key === 'ArrowLeft') go(-1)
-      if (e.key === 'Escape') onClose()
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -58,7 +59,7 @@ export default function Lightbox({
   if (!cur) return null
 
   return (
-    <div className="lightbox open" id="lightbox">
+    <div className="lightbox open" id="lightbox" role="dialog" aria-modal="true" aria-label="Lightbox">
       <div className="lb-top">
         <div className="mono" style={{ fontSize: 9.5, letterSpacing: '.14em' }} id="lb-phase">
           {phaseLabel.toUpperCase()}

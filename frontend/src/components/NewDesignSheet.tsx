@@ -1,3 +1,4 @@
+import { useDialog } from '../lib/dialog'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -72,6 +73,7 @@ export default function NewDesignSheet() {
       qc.invalidateQueries({ queryKey: ['designs', project.id] })
       qc.invalidateQueries({ queryKey: ['projects'] })
       toast(`${d.name} · No. ${String(d.index_no).padStart(3, '0')}`)
+      setBusy(false)
       closeNewDesign()
     } catch (e) {
       toast(e instanceof Error && e.message ? `Failed: ${e.message.slice(0, 80)}` : 'Create failed')
@@ -79,12 +81,15 @@ export default function NewDesignSheet() {
     }
   }
 
+  useDialog('sheet-newdesign', open, () => { if (!busy) closeNewDesign() })
+
   // portaled to <body> so a transformed ancestor can't trap the fixed sheet
   return createPortal(
-    <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-newdesign">
-      <div className="backdrop" onClick={closeNewDesign} />
+    <div className={`sheet-wrap${open ? ' open' : ''}`} id="sheet-newdesign" inert={!open} role="dialog" aria-modal="true" aria-label="New design">
+      <div className="backdrop" onClick={() => { if (!busy) closeNewDesign() }} />
       <div className="sheet">
         <div className="grabber" />
+        <button className="sheet-close chip" aria-label="Close" disabled={busy} onClick={closeNewDesign}>Close</button>
         <div className="syne" style={{ fontSize: 18, fontWeight: 700, marginBottom: 3 }}>
           New design
         </div>

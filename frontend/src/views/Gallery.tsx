@@ -1,10 +1,13 @@
-import { useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   api, PHASE_LABELS,
   type Design, type Media, type Phase, type Project,
 } from '../lib/api'
+import { createPortal } from 'react-dom'
+import { useDialog } from '../lib/dialog'
+import { usePanel, useJourney } from '../lib/panel'
 import { useShare } from '../lib/store'
 
 /* PRD A7: the Gallery is the cross-project view of Finals AND Editorial media —
@@ -12,6 +15,9 @@ import { useShare } from '../lib/store'
 
 const GALLERY_PHASES: Phase[] = ['final', 'editorial']
 type GalFilter = 'all' | Phase
+
+// One bounded session record, retained across route unmounts.
+const browsing: { mode: 'stack' | 'ring'; filter: GalFilter; mediaId: string | null; scroll: number } = { mode: 'stack', filter: 'all', mediaId: null, scroll: 0 }
 
 interface GalItem {
   media: Media
@@ -80,8 +86,10 @@ function FanStack({
           const off = i - cur
           const a = Math.abs(off)
           return (
-            <div
+            <button
               key={it.media.id}
+              tabIndex={a > 2 ? -1 : 0}
+              aria-label={`${i === cur ? 'Open' : 'Focus'} ${it.design.name}`}
               className={`fan-card${a === 0 ? ' center' : ''}`}
               style={{
                 transform: `translateX(${off * 42}%) scale(${Math.max(0.72, 1 - a * 0.12)}) rotateY(${off * -10}deg)`,
@@ -102,7 +110,7 @@ function FanStack({
                   {it.design.name}
                 </div>
               </div>
-            </div>
+            </button>
           )
         })}
       </div>
@@ -127,10 +135,9 @@ function FanStack({
 
 /* ── Ring: items on a slow-spinning circle; centre holds the share action ── */
 function Ring({
-  items, project, onPick, onShare,
+  items, onPick, onShare,
 }: {
   items: GalItem[]
-  project: Project | undefined
   onPick: (idx: number) => void
   onShare: () => void
 }) {
@@ -147,19 +154,20 @@ function Ring({
           const it = items[i % items.length]
           const angle = (i / N) * Math.PI * 2
           return (
-            <div
+            <button
               key={`${it.media.id}-${i}`}
+              aria-label={`Browse ${it.design.name}`}
               className="ring-item"
               style={{ transform: `translate(${Math.cos(angle) * R}px,${Math.sin(angle) * R}px)` }}
               onClick={() => onPick(i % items.length)}
             >
               <div style={{ backgroundImage: bg(it.media) }} />
-            </div>
+            </button>
           )
         })}
       </div>
       <div className="ring-center">
-        <div className="eyebrow" style={{ marginBottom: 5 }}>{project?.name ?? 'Atelier'}</div>
+        <div className="eyebrow" style={{ marginBottom: 5 }}>Atelier</div>
         <div className="syne" style={{ fontSize: 20, fontWeight: 700 }}>
           {items.length} piece{items.length === 1 ? '' : 's'}.<br />One archive.
         </div>
@@ -172,7 +180,7 @@ function Ring({
           }}
           onClick={onShare}
         >
-          SHARE THIS
+          Share project…
         </button>
       </div>
     </div>
@@ -181,10 +189,13 @@ function Ring({
 
 export default function Gallery() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const journey = useJourney()
   const openShare = useShare(s => s.openShare)
-  const [mode, setMode] = useState<'stack' | 'ring'>('stack')
-  const [filter, setFilter] = useState<GalFilter>('all')
-  const [fanIdx, setFanIdx] = useState(0)
+  const [mode, setMode] = useState<'stack' | 'ring'>(browsing.mode)
+  const [filter, setFilter] = useState<GalFilter>(browsing.filter)
+  const [mediaId, setMediaId] = useState<string | null>(browsing.mediaId)
 
   const { data, isLoading } = useGalleryItems()
   const all = useMemo(() => data?.items ?? [], [data])
@@ -193,10 +204,52 @@ export default function Gallery() {
     [all, filter],
   )
   const count = (p: Phase) => all.filter(it => it.media.phase === p).length
-  const project = data?.projects[0]
-
-  const openDesign = (it: GalItem) => navigate(`/d/${it.design.id}`)
-  const share = () => project && openShare({ kind: 'project', id: project.id, name: project.name })
+  const fanIdx = Math.max(0, items.findIndex(it => it.media.id === mediaId))
+  const setFanIdx = (i: number) => setMediaId(items[i]?.media.id ?? null)
+  const focused = items[fanIdx]
+  const openDesign = (it: GalItem) => journey.openDesign(it.design.id, 'Gallery')
+  const shareProjects = (data?.projects ?? []).map(project => ({
+    label: `Share project: ${project.name}`,
+    run: () => openShare({ kind: 'project' as const, id: project.id, name: project.name }),
+  }))
+  const [choosingProject, setChoosingProject] = useState(false)
+  const restored = useRef(false)
+  useEffect(() => {
+    browsing.mode = mode; browsing.filter = filter; browsing.mediaId = mediaId
+  }, [mode, filter, mediaId])
+  useEffect(() => {
+    if (isLoading) return
+    const frame = requestAnimationFrame(() => {
+      if (!restored.current) {
+        // Browser back/forward belongs to ScrollRestoration. An older
+        // explicit-return position in history state must not override it.
+        if (navigationType !== 'POP') window.scrollTo(0, location.state?.restoreScroll ?? browsing.scroll)
+        restored.current = true
+      }
+    })
+    const remember = () => { if (restored.current) browsing.scroll = window.scrollY }
+    window.addEventListener('scroll', remember)
+    return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', remember) }
+  }, [isLoading, location.state, navigationType])
+  usePanel([
+    ...(!focused && !isLoading ? [{ primary: true, label: 'Choose a design', run: () => navigate('/') }]
+      : mode === 'ring' ? [
+        { primary: true, label: 'Browse pieces', disabled: !focused, run: () => setMode('stack') },
+        { label: 'Share project…', disabled: !shareProjects.length || !focused, run: () => setChoosingProject(true) },
+      ] : [
+        { primary: true, label: 'Open design', disabled: !focused, run: () => focused && openDesign(focused) },
+        { label: 'Share design', disabled: !focused, run: () => focused && openShare({ kind: 'design', id: focused.design.id, name: focused.design.name }) },
+      ]),
+    { label: 'View / filter', children: [
+      { label: 'Stack', run: () => setMode('stack') },
+      { label: 'Ring', run: () => setMode('ring') },
+      { label: 'Everything', run: () => { setFilter('all'); setMediaId(null) } },
+      ...GALLERY_PHASES.map(p => ({ label: PHASE_LABELS[p], run: () => { setFilter(p); setMediaId(null) } })),
+      { label: 'Share project…', disabled: !shareProjects.length, children: shareProjects },
+      { label: 'Choose a design', run: () => navigate('/') },
+    ] },
+  ])
+  useDialog('gallery-project-picker', choosingProject, () => setChoosingProject(false))
 
   return (
     <div className="view">
@@ -219,11 +272,11 @@ export default function Gallery() {
         </div>
 
         <div className="chips">
-          <button className={`chip${filter === 'all' ? ' on' : ''}`} onClick={() => { setFilter('all'); setFanIdx(0) }}>
+          <button className={`chip${filter === 'all' ? ' on' : ''}`} onClick={() => { setFilter('all'); setMediaId(null) }}>
             Everything · {all.length}
           </button>
           {GALLERY_PHASES.map(p => (
-            <button key={p} className={`chip${filter === p ? ' on' : ''}`} onClick={() => { setFilter(p); setFanIdx(0) }}>
+            <button key={p} className={`chip${filter === p ? ' on' : ''}`} onClick={() => { setFilter(p); setMediaId(null) }}>
               {PHASE_LABELS[p]} · {count(p)}
             </button>
           ))}
@@ -235,10 +288,11 @@ export default function Gallery() {
           </div>
         ) : !items.length ? (
           <div className="panel rise" style={{ padding: 24, marginTop: 10 }}>
-            <div className="syne" style={{ fontSize: 16, fontWeight: 700 }}>No finals yet</div>
+            <div className="syne" style={{ fontSize: 16, fontWeight: 700 }}>{filter === 'all' ? 'No gallery photos yet' : `No ${PHASE_LABELS[filter].toLowerCase()} photos yet`}</div>
             <p style={{ fontSize: 12.5, color: 'var(--fog)', marginTop: 6, lineHeight: 1.6 }}>
-              Capture a Final product or Editorial photo on a design and it shows up here.
+              Choose a design and add a Final product or Editorial photo to see it here.
             </p>
+            <button className="primary-btn press" onClick={() => navigate('/')}>Choose a design</button>
           </div>
         ) : mode === 'stack' ? (
           /* key={filter}: filter changes the CONTENT → rebuild + re-animate (TDD §10.2) */
@@ -248,12 +302,18 @@ export default function Gallery() {
           <Ring
             key={filter}
             items={items}
-            project={project}
             onPick={i => { setFanIdx(i); setMode('stack') }}
-            onShare={share}
+            onShare={() => setChoosingProject(true)}
           />
         )}
       </div>
+      {choosingProject && createPortal(<div className="sheet-wrap open" id="gallery-project-picker" role="dialog" aria-modal="true" aria-label="Choose a project to share">
+        <div className="backdrop" onClick={() => setChoosingProject(false)} />
+        <div className="sheet"><div className="grabber" /><div className="dialog-heading"><h2 className="syne">Share a project</h2><button className="chip" onClick={() => setChoosingProject(false)}>Close</button></div>
+          <p>Choose the collection this link will include.</p>
+          <div className="panel-menu-items">{shareProjects.map(a => <button key={a.label} className="panel-key press" onClick={() => { setChoosingProject(false); a.run() }}>{a.label}</button>)}</div>
+        </div>
+      </div>, document.body)}
     </div>
   )
 }
