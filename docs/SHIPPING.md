@@ -39,3 +39,15 @@ PROGRESS.md records delivery rounds and follow-ups. Clearly distinguish locally 
 
 ## Context-panel regression suite
 The reusable browser checks now live in frontend/tests/browser. See its README for prerequisites and the five commands. ATELIER_TEST_URL only permits loopback hosts; ATELIER_TEST_EVIDENCE selects the artifact directory. The suite covers 21 screen/viewport combinations plus action/state/keyboard/busy regressions. Run lint/build before it. No production or backend access is required.
+
+## Authorized release procedure (verified 2026-09-26)
+
+SSH access is `root@137.184.211.55`; production `/opt/atelier` is a copied source tree, not a Git checkout. Compare its source before updating. Nginx serves `/var/www/wada.garden` and proxies `/api/` to loopback8010. Production env stays on the server. User explicitly authorized this release's push and deployment.
+
+Before deployment, archive backend/compose and frontend under a private `/opt/atelier/releases/<release>` directory, save a `pg_dump -Fc`, and tag the running API image for rollback. Build the candidate from a Git archive in the release directory; run full CI before activating. API compose image is `atelier-api:latest`. For API-only changes, tag the verified candidate then run `docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --no-deps --no-build api`. Startup applies migrations (this release adds nullable projects.wordmark in0008). Preserve the worker and in-flight jobs.
+
+Check `/health`, authorization rejection and read-only API behavior before publishing frontend. A short-lived smoke credential can be created and consumed entirely inside the API container; never output it or put production credentials into browser fixtures. No production mutation/generation/email/share calls are needed. Publish assets first without deleting old hashes, then atomically replace index.html and sw.js. Smoke the public shell/redirect, API health/auth, and exact asset hashes.
+
+Rollback: restore the archived frontend; restore backend/compose and retag the saved API image as `atelier-api:latest`, then recreate only the API with `--no-build`. Leave additive0008 in place; do not restore the database over newer user writes. Backups are a recovery aid, not permission to discard live data.
+
+CI MinIO Docker Hub and Quay images proved unavailable during this round. The workflow now builds upstream `RELEASE.2025-10-15T17-29-55Z` using Go1.24.8, binds the temporary S3 service to127.0.0.1:9000, and requires its health check before backend pytest.
