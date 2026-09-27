@@ -7,6 +7,15 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // Keep the shell available offline; secondary routes cache only when visited.
+        globPatterns: ['**/*.{html,css,png,ico,svg,webmanifest}', 'assets/index-*.js', 'assets/api-*.js'],
+        runtimeCaching: [{
+          urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/assets\/.*\.js$/.test(url.pathname),
+          handler: 'CacheFirst',
+          options: { cacheName: 'atelier-route-code', expiration: { maxEntries: 60, maxAgeSeconds: 30 * 24 * 3600 } },
+        }],
+      },
       manifest: {
         name: 'Atelier',
         short_name: 'Atelier',

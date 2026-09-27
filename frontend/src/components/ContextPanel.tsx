@@ -4,6 +4,22 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { usePanelState, type PanelAction } from '../lib/panel'
 import { useDialog } from '../lib/dialog'
 
+
+// Match the original navigation's 19px, rounded 1.5px outline icons.
+function ActionIcon({ label }: { label: string }) {
+  const d = /back|all projects|archive/i.test(label) ? 'M12 4l-6 6 6 6M6 10h11'
+    : /share/i.test(label) ? 'M10 13V3M6 7l4-4 4 4M4 11v6h12v-6'
+    : /new|add|capture/i.test(label) ? 'M10 4v12M4 10h12'
+    : /inbox|sort/i.test(label) ? 'M5 4h10l3 9v4H2v-4l3-9zM2 13h5l1 2h4l1-2h5'
+    : /filter/i.test(label) ? 'M3 5h14M6 10h8M8 15h4'
+    : /studio|studies/i.test(label) ? 'M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z'
+    : /more/i.test(label) ? 'M4 9v2M10 9v2M16 9v2'
+    : 'M3 5h14v11H3zM3 12l4-3 4 3 4-4 2 2'
+  return <svg aria-hidden="true" width="19" height="19" viewBox="0 0 20 20" fill="none">
+    <path d={d} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+}
+
 export default function ContextPanel() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -27,7 +43,7 @@ export default function ContextPanel() {
   return <>
     <div className={`context-panel${editing ? ' editing' : ''}`} aria-label="Contextual panel">
       <div className="panel-actions" aria-label="Screen actions">
-        {route === location.key && actions.map(a => <button key={a.label} className={`panel-key press${a.primary ? ' primary' : ''}`} title={a.label} disabled={a.disabled} onClick={() => execute(a)}>{a.label}</button>)}
+        {route === location.key && actions.map(a => <button key={a.label} className={`panel-key press${a.primary ? ' primary' : ''}`} title={a.label} disabled={a.disabled} onClick={() => execute(a)}><ActionIcon label={a.label} /><span className="tab-label">{a.label}</span></button>)}
       </div>
       <nav className="tabbar" aria-label="Main navigation">
         {([['Archive', '/'], ['Gallery', '/gallery'], ['Studies', '/studies']] as const).map(([label, to]) =>

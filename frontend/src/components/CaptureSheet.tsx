@@ -54,6 +54,7 @@ export default function CaptureSheet() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['inbox'] })
     qc.invalidateQueries({ queryKey: ['projects'] })
+    qc.invalidateQueries({ queryKey: ['gallery'] })
     if (designCtx) {
       qc.invalidateQueries({ queryKey: ['design', designCtx.id] })
       qc.invalidateQueries({ queryKey: ['timeline', designCtx.id] })

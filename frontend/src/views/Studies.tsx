@@ -89,7 +89,7 @@ export default function Studies() {
   const qc = useQueryClient()
   const { data, isLoading } = useQuery({ queryKey: ['studies'], queryFn: fetchStudies })
   const studies = data ?? []
-  usePanel([{ primary: true, label: 'Choose a design', run: () => navigate('/') }])
+  usePanel([{ primary: true, label: 'Designs', run: () => navigate('/') }])
 
   // drafts are free to delete; generated studies are spend records (API 409s)
   const deleteM = useMutation({

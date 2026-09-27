@@ -27,13 +27,13 @@ with sync_playwright() as playwright:
     page.wait_for_timeout(150)
     original = page.evaluate('scrollY')
     assert original > 25, 'Fixture must be scrollable to verify distinct positions'
-    page.locator('.panel-actions').get_by_role('button', name='Open design', exact=True).click()
+    page.locator('.panel-actions').get_by_role('button', name='Open', exact=True).click()
     page.locator('.back-inline').click()
     page.wait_for_timeout(250)
     assert abs(page.evaluate('scrollY') - original) < 2
     page.evaluate('scrollTo(0, 25)')
     page.wait_for_timeout(150)
-    page.locator('.panel-actions').get_by_role('button', name='Open design', exact=True).click()
+    page.locator('.panel-actions').get_by_role('button', name='Open', exact=True).click()
     page.go_back()
     page.wait_for_timeout(300)
     assert abs(page.evaluate('scrollY') - 25) < 2
@@ -43,7 +43,7 @@ with sync_playwright() as playwright:
     more.focus()
     page.keyboard.press('Enter')
     page.wait_for_timeout(150)
-    page.locator('#panel-menu').get_by_role('button', name='Share design', exact=True).focus()
+    page.locator('#panel-menu').get_by_role('button', name='Share', exact=True).focus()
     page.keyboard.press('Enter')
     page.wait_for_timeout(200)
     page.keyboard.press('Escape')

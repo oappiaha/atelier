@@ -15,7 +15,7 @@ class Fixture:
   self.calls=[]; self.unhandled=[]; self.errors=[]; self.failed=[]
   self.projects=[dict(id='p1',name='First collection',kicker='BROWSER TEST',design_count=2),dict(id='p2',name='Second collection',kicker='BROWSER TEST',design_count=1)]
   self.designs=[dict(id='d'+str(i),project_id='p1' if i<3 else 'p2',name=n,status='final',index_no=i,materials='Cotton',category='garments',cover_media_id=None,cover_url='/test-image.jpg',entry_count=1,media_count=1,created_at=STAMP) for i,n in enumerate(['First coat','Second bag','Third shirt'],1)]
-  self.media=[] if empty else [dict(id='m'+str(i),design_id=d['id'],entry_id='e'+str(i),kind='image',phase='editorial' if i==2 else 'final',url='/test-image.jpg',thumb_url='/test-image.jpg',width=600,height=800,duration_ms=None,caption=d['name'],source_url=None,source_app=None,created_at=STAMP) for i,d in enumerate(self.designs,1)]
+  self.media=[] if empty else [dict(id='m'+str(i),design_id=d['id'],entry_id='e'+str(i),kind='image',phase='editorial' if i==2 else 'final',url='/test-image.jpg',thumb_url='/test-image.jpg',width=600,height=800,duration_ms=None,caption=d['name'],source_url=None,source_app=None,created_at=f'2026-09-01T12:00:0{4-i}Z') for i,d in enumerate(self.designs,1)]
   self.inbox=[] if empty else [dict(self.media[0],id='inbox1',design_id=None,entry_id=None,caption='Unsorted image')]
   self.studies=[]
  def route(self, route):
@@ -23,7 +23,20 @@ class Fixture:
   body=req.post_data_json if req.post_data and 'application/json' in req.headers.get('content-type','') else None
   self.calls.append(dict(method=method,path=path,body=body))
   data=None
-  if path=='/projects': data=self.projects
+  if path=='/gallery':
+   eligible=[m for m in self.media if m['kind']=='image' and m['phase'] in ('final','editorial')]
+   eligible.sort(key=lambda m:(m['created_at'],m['id']),reverse=True)
+   eligible.sort(key=lambda m:0 if m['phase']=='final' else 1)
+   phase=query.get('phase',['all'])[0]
+   selected=[m for m in eligible if phase=='all' or m['phase']==phase]
+   start=int(query.get('cursor',['0'])[0]); limit=int(query.get('limit',['24'])[0])
+   items=[]
+   for m in selected[start:start+limit]:
+    d=next(d for d in self.designs if d['id']==m['design_id'])
+    p=next(p for p in self.projects if p['id']==d['project_id'])
+    items.append(dict(media=m,design=d,project=p))
+   data=dict(items=items,projects=self.projects,counts={ph:sum(m['phase']==ph for m in eligible) for ph in ['final','editorial']},total=len(selected),next_cursor=str(start+limit) if start+limit<len(selected) else None)
+  elif path=='/projects': data=self.projects
   elif path=='/inbox': data=self.inbox
   elif path.startswith('/inbox/') and path.endswith('/triage'):
    selected=next(m for m in self.inbox if m['id']==path.split('/')[2]); self.inbox.remove(selected)

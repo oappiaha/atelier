@@ -6,7 +6,7 @@
 // empty draft when one exists, and only creates when there's nothing to
 // resume. Draft cards carry a delete key (drafts are free; anything
 // generated is a spend record and the API 409s).
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -63,20 +63,7 @@ export default function StudioHub() {
     [media.data],
   )
 
-  // PREWARM (Beezy 2026-08-06: "PhotoRoom should already be activated when I
-  // bring the product to Wada Studio"): entering the hub silently enqueues
-  // segmentation — cutout first, then regions — for the likely bases. POST
-  // /segment is idempotent (cached regions = no model call, in-flight lock
-  // dedupes), so this costs each photo's cutout+scan ONCE ever, in the
-  // background, and NEW STUDY usually opens the composer instantly.
-  const prewarmed = useRef<string | null>(null)
-  useEffect(() => {
-    if (!designId || prewarmed.current === designId || !photos.length) return
-    prewarmed.current = designId
-    photos.slice(0, 6).forEach(m => {
-      segmentMedia(m.id).catch(() => {}) // fire-and-forget
-    })
-  }, [designId, photos])
+  // Segmentation starts only for the base photo chosen in New study.
 
   /** Create a draft on a CHOSEN base photo — segments it first if needed. */
   const startOn = async (base: Media) => {
@@ -150,11 +137,11 @@ export default function StudioHub() {
 
   useDialog('base-picker', picking, () => setPicking(false))
   usePanel([
-    { label: 'Back to design', run: () => navigate(`/d/${designId}`, { state: journey.state }) },
-    { primary: true, label: opening ? 'Opening…' : 'New study', disabled: opening || studiesQ.isPending || media.isPending || !design.data || (!emptyDraft && !photos.length), run: newStudy },
+    { label: 'Design', run: () => navigate(`/d/${designId}`, { state: journey.state }) },
+    { primary: true, label: opening ? 'Opening' : 'New study', disabled: opening || studiesQ.isPending || media.isPending || !design.data || (!emptyDraft && !photos.length), run: newStudy },
     { label: 'More', children: [
-      { label: 'All studies', run: () => navigate('/studies') },
-      { label: 'Add to design', disabled: !design.data, run: useCapture.getState().openCapture },
+      { label: 'Studies', run: () => navigate('/studies') },
+      { label: 'Add', disabled: !design.data, run: useCapture.getState().openCapture },
     ] },
   ])
   const d = design.data

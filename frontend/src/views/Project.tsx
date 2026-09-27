@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import WordmarkSheet from '../components/WordmarkSheet'
+import BrowseControls from '../components/BrowseControls'
+import { useBrowse } from '../lib/browse'
 import { useNavigate, useParams } from 'react-router-dom'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import {
@@ -17,14 +20,10 @@ const titleCase = (s: string) =>
 export default function Project() {
   const { projectId } = useParams<{ projectId: string }>()
   const navigate = useNavigate()
+  const [wordmarkOpen, setWordmarkOpen] = useState(false)
   const journey = useJourney()
   const openShare = useShare(s => s.openShare)
   const openNewDesign = useNewDesign(s => s.openNewDesign)
-  const [status, setStatus] = useState<'all' | DesignStatus>('all')
-  const [category, setCategory] = useState<'all' | string>('all')
-  // mobile: the category row lives behind a small toggle chip so only ONE
-  // chip row sits under the header by default (desktop always shows both)
-  const [catOpen, setCatOpen] = useState(false)
 
   const { data: projects } = useQuery({
     queryKey: ['projects'],
@@ -37,6 +36,10 @@ export default function Project() {
     queryKey: ['designs', projectId, 'all'],
     queryFn: () => api<Design[]>(`/projects/${projectId}/designs`),
   })
+  const browse = useBrowse(`/p/${projectId}`, !all.isLoading)
+  const { status, category, catOpen } = browse
+  const setStatus = (status: 'all' | DesignStatus) => browse.set({ status })
+  const setCategory = (category: string) => browse.set({ category })
   // status chips drive a real ?status= query (the API filter).
   // NB: the key must NOT collide with the 'all' query above — when status==='all'
   // a shared key would let this (disabled) queryFn win a refetch after
@@ -56,22 +59,27 @@ export default function Project() {
   ).sort()
   const catActive = category !== 'all' && categories.includes(category)
   const byStatus = status === 'all' ? all.data : filtered.data
-  const designs = catActive
+  const categorized = catActive
     ? byStatus?.filter(d => d.category && titleCase(d.category) === category)
     : byStatus
+  const designs = categorized?.filter(d => `${d.name} ${d.index_no} ${d.materials ?? ''}`.toLowerCase().includes(browse.search.trim().toLowerCase())).slice().sort((a, b) =>
+    browse.sort === 'name' ? a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }) : browse.sort === 'recent' ? b.created_at.localeCompare(a.created_at) : a.index_no - b.index_no)
   const count = (s: DesignStatus) => all.data?.filter(d => d.status === s).length ?? 0
 
   usePanel([
-    { label: 'All projects', run: () => navigate('/') },
+    { label: 'Projects', run: () => navigate('/') },
     { primary: true, label: 'New design', disabled: !project, run: () => project && openNewDesign(project) },
     { label: 'More', children: [
-      { label: 'Share project', disabled: !project, run: () => project && openShare({ kind: 'project', ...project }) },
-      { label: 'Capture to Inbox', run: useCapture.getState().openCapture },
+      { label: 'Wordmark', disabled: !project, run: () => setWordmarkOpen(true) },
+      { label: 'Top', run: () => window.scrollTo({ top: 0, behavior: 'smooth' }) },
+      { label: 'Share', disabled: !project, run: () => project && openShare({ kind: 'project', ...project }) },
+      { label: 'Capture', run: useCapture.getState().openCapture },
     ] },
   ])
 
   return (
     <div className="view">
+      {wordmarkOpen && project && <WordmarkSheet key={project.id} project={project} onClose={() => setWordmarkOpen(false)} />}
       <div className="content">
         <button className="back-inline press" onClick={() => navigate('/')}>
           <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
@@ -79,31 +87,15 @@ export default function Project() {
           </svg>
           All projects
         </button>
-        <div className="hdr" style={{ paddingTop: 12 }}>
-          <div className="rise">
-            {/* count lives in the "All · N" chip right below — don't say it twice */}
-            <div className="eyebrow" style={{ marginBottom: 4 }}>
-              {project?.kicker ?? 'PROJECT'}
-            </div>
-            <div className="syne" style={{ fontSize: 28, fontWeight: 800 }}>
-              {project?.name ?? '…'}
-            </div>
-          </div>
-          {project && (
-            <button
-              className="glassbtn press rise"
-              aria-label="Share project"
-              id="project-share"
-              style={{ width: 40, height: 40, animationDelay: '.06s' }}
-              onClick={() => openShare({ kind: 'project', id: project.id, name: project.name })}
-            >
-              <svg width="14" height="15" viewBox="0 0 15 16" fill="none">
-                <path d="M7.5 1v9M7.5 1L4 4.5M7.5 1L11 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                <path d="M2 8v5.5h11V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-          )}
-        </div>
+        <header className="collection-header">
+          <h1 className="syne collection-title">
+            {project?.wordmark
+              ? <img className="collection-wordmark" src={project.wordmark} alt={project.name} />
+              : project?.name ?? 'Loading…'}
+          </h1>
+        </header>
+
+        <BrowseControls {...browse} onLayout={layout => browse.set({ layout })} onSearch={search => browse.set({ search })} onSort={sort => browse.set({ sort })} />
 
         {/* desktop: category row over status row, as before. Mobile (≤899px):
            the status row leads and the category row hides behind the CATEGORY
@@ -140,7 +132,7 @@ export default function Project() {
               <button
                 className={`chip cat-toggle${catActive ? ' on' : ''}`}
                 id="cat-toggle"
-                onClick={() => setCatOpen(o => !o)}
+                onClick={() => browse.set({ catOpen: !catOpen })}
               >
                 {catActive ? category : 'Category'}
                 <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
@@ -176,12 +168,12 @@ export default function Project() {
           <>
             {!designs?.length && (
               <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', padding: '18px 4px' }}>
-                Nothing here yet.
+                {browse.search || status !== 'all' || catActive ? 'No matching designs. Try another search or filter.' : 'Nothing here yet.'}
               </div>
             )}
             {/* key={filter}: the filter changed the CONTENT, so the grid re-animates —
                correct per TDD §10.2. Within a filter, cards keep stable uuid keys. */}
-            <div className="dgrid" id="dgrid" key={`${status}:${catActive ? category : 'all'}`}>
+            <div className={`dgrid${browse.layout === 'list' ? ' archive-list' : ''}`} id="dgrid" key={`${status}:${catActive ? category : 'all'}`}>
               {designs?.map((d, k) => (
                 <button
                   key={d.id}
@@ -212,7 +204,7 @@ export default function Project() {
                 <button
                   className="dcard dcard-new press"
                   id="dcard-new"
-                  style={{ animation: 'tileIn .55s var(--ease) both', animationDelay: `${(designs?.length ?? 0) * 0.06}s` }}
+                  style={{ animation: 'tileIn .55s var(--ease) both', animationDelay: `${Math.min(designs?.length ?? 0, 11) * 0.06}s` }}
                   onClick={() => openNewDesign({ id: project.id, name: project.name })}
                 >
                   <div className="plus">+</div>

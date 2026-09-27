@@ -71,6 +71,7 @@ export default function Inbox() {
       qc.invalidateQueries({ queryKey: ['media', destDesign.id] })
       qc.invalidateQueries({ queryKey: ['designs'] })
       qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: ['gallery'] })
       toast(`Sorted → ${destDesign.name}`)
       setSel(null)
     } catch (e) {

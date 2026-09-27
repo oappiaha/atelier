@@ -30,14 +30,14 @@ def inbox(browser):
 def context(browser):
  f=Fixture();ctx,page=f.context(browser)
  try:
-  goto(page,'/d/d3');action(page,'Add to design').click()
+  goto(page,'/d/d3');action(page,'Add').click()
   expect(page.locator('#sheet-capture.open #dest-name')).to_have_text('Third shirt')
   close(page,'#sheet-capture')
   action(page,'More').click()
   page.locator('#panel-menu').get_by_role('button',name='Studio',exact=True).click()
   expect(page).to_have_url(BASE+'/d/d3/studio')
   expect(page.locator('.tabbar [aria-current="page"]')).to_contain_text('Studies')
-  action(page,'More').click();page.locator('#panel-menu').get_by_role('button',name='Add to design',exact=True).click()
+  action(page,'More').click();page.locator('#panel-menu').get_by_role('button',name='Add',exact=True).click()
   expect(page.locator('#sheet-capture.open #dest-name')).to_have_text('Third shirt')
   close(page,'#sheet-capture')
   page.locator('.tabbar').get_by_role('button',name='Archive',exact=True).click()
@@ -52,7 +52,7 @@ def empty(browser):
  f=Fixture(empty=True);ctx,page=f.context(browser,width=320,height=568)
  try:
   goto(page,'/gallery');page.wait_for_timeout(300)
-  for label in ['Open design','Share design']:
+  for label in ['Open','Share']:
    candidate=action(page,label)
    assert candidate.count()==0 or candidate.is_disabled(),label
   assert_no_overflow(page);page.screenshot(path=str(OUT/'empty-gallery.png'))

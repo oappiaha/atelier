@@ -79,14 +79,14 @@ function TlItem({
         <div className="tl-card">
           {imgs.length === 1 && (
             <div className="tl-media" style={{ height: 150 }} onClick={() => open(0)}>
-              <div style={{ backgroundImage: bg(imgs[0]) }} />
+              <img className="timeline-image" loading="lazy" decoding="async" src={imgs[0].thumb_url ?? imgs[0].url} alt={imgs[0].caption ?? label} />
             </div>
           )}
           {(imgs.length === 2 || imgs.length === 3) && (
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${imgs.length},1fr)`, gap: 2 }}>
               {imgs.map((m, i) => (
                 <div key={m.id} className="tl-media" style={{ height: 88 }} onClick={() => open(i)}>
-                  <div style={{ backgroundImage: bg(m) }} />
+                  <img className="timeline-image" loading="lazy" decoding="async" src={m.thumb_url ?? m.url} alt={m.caption ?? label} />
                 </div>
               ))}
             </div>
@@ -94,7 +94,7 @@ function TlItem({
           {imgs.length >= 4 && (
             <div className="mood-grid">
               {imgs.map((m, i) => (
-                <div key={m.id} style={{ backgroundImage: bg(m) }} onClick={() => open(i)} />
+                <div key={m.id} onClick={() => open(i)}><img className="timeline-image" loading="lazy" decoding="async" src={m.thumb_url ?? m.url} alt={m.caption ?? label} /></div>
               ))}
             </div>
           )}
@@ -178,7 +178,7 @@ function MTile({
   }
   return (
     <div className="m-tile" style={{ animationDelay: `${delay}s` }} onClick={onOpen}>
-      <img className="m-art" src={media.thumb_url ?? media.url} alt={media.caption ?? media.phase ?? 'media'} />
+      <img loading="lazy" decoding="async" className="m-art" src={media.thumb_url ?? media.url} alt={media.caption ?? media.phase ?? 'media'} />
       <div className="m-shine" />
       <button
         className="m-dl press"
@@ -283,6 +283,7 @@ export default function Design() {
       toast('Product deleted')
       qc.invalidateQueries({ queryKey: ['designs'] })
       qc.invalidateQueries({ queryKey: ['projects'] })
+      qc.invalidateQueries({ queryKey: ['gallery'] })
       qc.invalidateQueries({ queryKey: ['studies'] })
       navigate(design.data ? `/p/${design.data.project_id}` : '/')
     },
@@ -299,6 +300,7 @@ export default function Design() {
         : 'Already shot — it’s on the timeline')
       qc.invalidateQueries({ queryKey: ['timeline', designId] })
       qc.invalidateQueries({ queryKey: ['media', designId] })
+      qc.invalidateQueries({ queryKey: ['gallery'] })
       qc.invalidateQueries({ queryKey: ['design', designId] })
     },
     onError: () => toast('Studio shot failed — PhotoRoom may be unavailable'),
@@ -345,12 +347,12 @@ export default function Design() {
 
   const d = design.data
   usePanel([
-    { label: `Back to ${journey.backLabel ?? projectName}`, run: () => journey.back(d?.project_id) },
-    { primary: true, label: 'Add to design', disabled: !d, run: useCapture.getState().openCapture },
+    { label: 'Back', run: () => journey.back(d?.project_id) },
+    { primary: true, label: 'Add', disabled: !d, run: useCapture.getState().openCapture },
     { label: 'More', disabled: !d, children: [
-      { label: 'Share design', run: () => d && openShare({ kind: 'design', id: d.id, name: d.name }) },
+      { label: 'Share', run: () => d && openShare({ kind: 'design', id: d.id, name: d.name }) },
       { label: 'Studio', run: openStudio },
-      { label: view === 'timeline' ? 'Show media' : 'Show timeline', run: () => setView(view === 'timeline' ? 'media' : 'timeline') },
+      { label: view === 'timeline' ? 'Media' : 'Timeline', run: () => setView(view === 'timeline' ? 'media' : 'timeline') },
     ] },
   ])
 

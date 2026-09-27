@@ -1,3 +1,5 @@
+import BrowseControls from '../components/BrowseControls'
+import { useBrowse } from '../lib/browse'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { api, fetchInbox, type Project } from '../lib/api'
@@ -11,12 +13,15 @@ export default function Home() {
     queryKey: ['projects'],
     queryFn: () => api<Project[]>('/projects'),
   })
+  const browse = useBrowse('/', !isLoading)
+  const visible = projects?.filter(p => p.name.toLowerCase().includes(browse.search.trim().toLowerCase())).slice()
+  if (browse.sort === 'name') visible?.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
   // PRD A5 — "Home surfaces the unsorted count"
   const { data: inbox } = useQuery({ queryKey: ['inbox'], queryFn: fetchInbox })
 
   usePanel([
     { primary: true, label: 'New design', disabled: !projects?.length, run: () => openNewDesign(projects?.length === 1 ? projects[0] : null) },
-    { label: `Inbox${inbox ? ` · ${inbox.length}` : ''}`, run: () => navigate('/inbox') },
+    { label: `Inbox${inbox?.length ? ` · ${Math.min(inbox.length, 99)}${inbox.length > 99 ? '+' : ''}` : ''}`, run: () => navigate('/inbox') },
     { label: 'Capture', run: useCapture.getState().openCapture },
   ])
 
@@ -54,6 +59,7 @@ export default function Home() {
           </button>
         )}
 
+        <BrowseControls {...browse} projects onLayout={layout => browse.set({ layout })} onSearch={search => browse.set({ search })} onSort={sort => browse.set({ sort })} />
         {isLoading ? (
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', padding: '18px 4px' }}>
             Loading…
@@ -66,8 +72,9 @@ export default function Home() {
             </p>
           </div>
         ) : (
-          <div className="proj-row">
-            {projects.map(p => (
+          <div className={`proj-row${browse.layout === 'list' ? ' project-list' : ''}`}>
+            {!visible?.length && <p>No matching projects.</p>}
+            {visible?.map(p => (
               <button key={p.id} className="panel press" style={{ padding: 20, textAlign: 'left' }} onClick={() => navigate(`/p/${p.id}`)}>
                 <div className="eyebrow">{p.kicker ?? 'PROJECT'}</div>
                 <div className="syne" style={{ fontSize: 18, fontWeight: 700, marginTop: 4 }}>{p.name}</div>

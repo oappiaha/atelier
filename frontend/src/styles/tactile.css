@@ -227,9 +227,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
   .context-panel *, .sheet, .ring{animation:none!important;transition:none!important;}
 }
 
-.panel-key{overflow:hidden;text-overflow:ellipsis;}
+.panel-menu-items .panel-key{white-space:normal;overflow-wrap:anywhere;}
 
 .panel-key.primary{background:var(--key-dark);color:white;box-shadow:0 2px 0 var(--key-rim-dark),0 4px 8px -2px var(--key-cast),inset 0 1px 0 rgba(255,255,255,.18);}
 .panel-key.primary:active{box-shadow:var(--sh-latch);}
 
-.panel-actions .panel-key{white-space:nowrap;text-overflow:ellipsis;overflow:hidden;}
+.panel-actions .panel-key{white-space:nowrap;}
+
+/* Screen actions use the original panel's icon-over-monospace-label rhythm. */
+.panel-actions .panel-key{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:5px 6px;}
+.panel-actions .panel-key svg{flex-shrink:0;}
+.panel-actions .panel-key .tab-label{display:block;white-space:nowrap;font-weight:400;}

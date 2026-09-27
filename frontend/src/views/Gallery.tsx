@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useNavigationType } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import {
   api, PHASE_LABELS,
-  type Design, type Media, type Phase, type Project,
+  type Design, type Media, type Project,
 } from '../lib/api'
 import { createPortal } from 'react-dom'
 import { useDialog } from '../lib/dialog'
@@ -13,48 +13,39 @@ import { useShare } from '../lib/store'
 /* PRD A7: the Gallery is the cross-project view of Finals AND Editorial media —
    "the answer to 'what do you make?'" — in Stack (fanned carousel) and Ring modes. */
 
-const GALLERY_PHASES: Phase[] = ['final', 'editorial']
-type GalFilter = 'all' | Phase
+const GALLERY_PHASES = ['final', 'editorial'] as const
+type GalFilter = 'all' | 'final' | 'editorial'
 
 // One bounded session record, retained across route unmounts.
 const browsing: { mode: 'stack' | 'ring'; filter: GalFilter; mediaId: string | null; scroll: number } = { mode: 'stack', filter: 'all', mediaId: null, scroll: 0 }
 
 interface GalItem {
-  media: Media
-  design: Design
-  project: Project
+  media: Pick<Media, 'id' | 'thumb_url'> & { phase: 'final' | 'editorial' }
+  design: Pick<Design, 'id' | 'name' | 'index_no'>
+  project: Pick<Project, 'id' | 'name'>
+}
+interface GalleryPage {
+  items: GalItem[]
+  projects: Pick<Project, 'id' | 'name'>[]
+  counts: Record<'final' | 'editorial', number>
+  total: number
+  next_cursor: string | null
 }
 
-/** One fan-out fetch: projects → designs → media, kept as flat gallery items. */
-function useGalleryItems() {
-  return useQuery({
-    queryKey: ['gallery'],
-    queryFn: async (): Promise<{ items: GalItem[]; projects: Project[] }> => {
-      const projects = await api<Project[]>('/projects')
-      const designLists = await Promise.all(
-        projects.map(p => api<Design[]>(`/projects/${p.id}/designs`)),
-      )
-      const designs = designLists.flatMap((ds, i) => ds.map(d => ({ d, p: projects[i] })))
-      const mediaLists = await Promise.all(
-        designs.map(({ d }) => api<Media[]>(`/designs/${d.id}/media`)),
-      )
-      const items = designs.flatMap(({ d, p }, i) =>
-        mediaLists[i]
-          .filter(m => m.kind === 'image' && m.phase && GALLERY_PHASES.includes(m.phase))
-          .map(media => ({ media, design: d, project: p })),
-      )
-      // finals lead, then editorial; newest first within a phase
-      items.sort(
-        (a, b) =>
-          GALLERY_PHASES.indexOf(a.media.phase!) - GALLERY_PHASES.indexOf(b.media.phase!)
-          || b.media.created_at.localeCompare(a.media.created_at),
-      )
-      return { items, projects }
+function useGalleryItems(filter: GalFilter) {
+  return useInfiniteQuery({
+    queryKey: ['gallery', filter],
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) => {
+      const params = new URLSearchParams({ phase: filter })
+      if (pageParam) params.set('cursor', pageParam)
+      return api<GalleryPage>(`/gallery?${params}`, { signal })
     },
+    getNextPageParam: page => page.next_cursor ?? undefined,
   })
 }
 
-const bg = (m: Media) => `url(${JSON.stringify(m.thumb_url ?? m.url)})`
+const bg = (m: GalItem['media']) => `url(${JSON.stringify(m.thumb_url)})`
 
 /* ── Stack: the mock's fan — absolute cards, transforms move, DOM stays ── */
 function FanStack({
@@ -85,6 +76,7 @@ function FanStack({
         {items.map((it, i) => {
           const off = i - cur
           const a = Math.abs(off)
+          if (a > 2) return null
           return (
             <button
               key={it.media.id}
@@ -135,15 +127,16 @@ function FanStack({
 
 /* ── Ring: items on a slow-spinning circle; centre holds the share action ── */
 function Ring({
-  items, onPick, onShare,
+  items, total, onPick, onShare,
 }: {
   items: GalItem[]
+  total: number
   onPick: (idx: number) => void
   onShare: () => void
 }) {
   const stageRef = useRef<HTMLDivElement>(null)
   // fill the circle even when the archive is young — repeat, mock-style
-  const N = Math.max(Math.min(16, items.length * 4), items.length)
+  const N = Math.min(16, items.length * 4)
   const w = stageRef.current?.clientWidth ?? (typeof window !== 'undefined' ? window.innerWidth : 390)
   const R = Math.min(215, (Math.min(w, window.innerWidth) - 125) / 2)
 
@@ -169,7 +162,7 @@ function Ring({
       <div className="ring-center">
         <div className="eyebrow" style={{ marginBottom: 5 }}>Atelier</div>
         <div className="syne" style={{ fontSize: 20, fontWeight: 700 }}>
-          {items.length} piece{items.length === 1 ? '' : 's'}.<br />One archive.
+          {total} piece{total === 1 ? '' : 's'}.<br />One archive.
         </div>
         <button
           className="press"
@@ -180,7 +173,7 @@ function Ring({
           }}
           onClick={onShare}
         >
-          Share project…
+          Share project
         </button>
       </div>
     </div>
@@ -197,19 +190,23 @@ export default function Gallery() {
   const [filter, setFilter] = useState<GalFilter>(browsing.filter)
   const [mediaId, setMediaId] = useState<string | null>(browsing.mediaId)
 
-  const { data, isLoading } = useGalleryItems()
-  const all = useMemo(() => data?.items ?? [], [data])
-  const items = useMemo(
-    () => (filter === 'all' ? all : all.filter(it => it.media.phase === filter)),
-    [all, filter],
-  )
-  const count = (p: Phase) => all.filter(it => it.media.phase === p).length
+  const { data, isLoading, isError, refetch, fetchNextPage, hasNextPage, isFetchingNextPage, isFetchNextPageError } = useGalleryItems(filter)
+  const items = useMemo(() => data?.pages.flatMap(page => page.items) ?? [], [data])
+  const summary = data?.pages[0]
+  const count = (p: 'final' | 'editorial') => summary?.counts[p] ?? 0
   const fanIdx = Math.max(0, items.findIndex(it => it.media.id === mediaId))
   const setFanIdx = (i: number) => setMediaId(items[i]?.media.id ?? null)
   const focused = items[fanIdx]
+  useEffect(() => {
+    // Fetch the next page only as browsing approaches the loaded boundary.
+    if (mode === 'stack' && items.length && fanIdx >= items.length - 4 && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) {
+      void fetchNextPage()
+    }
+  }, [mode, items.length, fanIdx, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage])
+
   const openDesign = (it: GalItem) => journey.openDesign(it.design.id, 'Gallery')
-  const shareProjects = (data?.projects ?? []).map(project => ({
-    label: `Share project: ${project.name}`,
+  const shareProjects = (summary?.projects ?? []).map(project => ({
+    label: project.name,
     run: () => openShare({ kind: 'project' as const, id: project.id, name: project.name }),
   }))
   const [choosingProject, setChoosingProject] = useState(false)
@@ -232,21 +229,21 @@ export default function Gallery() {
     return () => { cancelAnimationFrame(frame); window.removeEventListener('scroll', remember) }
   }, [isLoading, location.state, navigationType])
   usePanel([
-    ...(!focused && !isLoading ? [{ primary: true, label: 'Choose a design', run: () => navigate('/') }]
+    ...(!focused && !isLoading ? [{ primary: true, label: 'Designs', run: () => navigate('/') }]
       : mode === 'ring' ? [
-        { primary: true, label: 'Browse pieces', disabled: !focused, run: () => setMode('stack') },
-        { label: 'Share project…', disabled: !shareProjects.length || !focused, run: () => setChoosingProject(true) },
+        { primary: true, label: 'Browse', disabled: !focused, run: () => setMode('stack') },
+        { label: 'Share', disabled: !shareProjects.length || !focused, run: () => setChoosingProject(true) },
       ] : [
-        { primary: true, label: 'Open design', disabled: !focused, run: () => focused && openDesign(focused) },
-        { label: 'Share design', disabled: !focused, run: () => focused && openShare({ kind: 'design', id: focused.design.id, name: focused.design.name }) },
+        { primary: true, label: 'Open', disabled: !focused, run: () => focused && openDesign(focused) },
+        { label: 'Share', disabled: !focused, run: () => focused && openShare({ kind: 'design', id: focused.design.id, name: focused.design.name }) },
       ]),
-    { label: 'View / filter', children: [
+    { label: 'View', children: [
       { label: 'Stack', run: () => setMode('stack') },
       { label: 'Ring', run: () => setMode('ring') },
       { label: 'Everything', run: () => { setFilter('all'); setMediaId(null) } },
       ...GALLERY_PHASES.map(p => ({ label: PHASE_LABELS[p], run: () => { setFilter(p); setMediaId(null) } })),
-      { label: 'Share project…', disabled: !shareProjects.length, children: shareProjects },
-      { label: 'Choose a design', run: () => navigate('/') },
+      { label: 'Share', disabled: !shareProjects.length, children: shareProjects },
+      { label: 'Designs', run: () => navigate('/') },
     ] },
   ])
   useDialog('gallery-project-picker', choosingProject, () => setChoosingProject(false))
@@ -273,7 +270,7 @@ export default function Gallery() {
 
         <div className="chips">
           <button className={`chip${filter === 'all' ? ' on' : ''}`} onClick={() => { setFilter('all'); setMediaId(null) }}>
-            Everything · {all.length}
+            Everything · {count('final') + count('editorial')}
           </button>
           {GALLERY_PHASES.map(p => (
             <button key={p} className={`chip${filter === p ? ' on' : ''}`} onClick={() => { setFilter(p); setMediaId(null) }}>
@@ -286,6 +283,8 @@ export default function Gallery() {
           <div className="mono" style={{ fontSize: 10.5, color: 'var(--faint)', padding: '18px 4px' }}>
             Loading…
           </div>
+        ) : isError && !items.length ? (
+          <div role="alert"><p>Could not load the gallery.</p><button className="chip" onClick={() => void refetch()}>Retry</button></div>
         ) : !items.length ? (
           <div className="panel rise" style={{ padding: 24, marginTop: 10 }}>
             <div className="syne" style={{ fontSize: 16, fontWeight: 700 }}>{filter === 'all' ? 'No gallery photos yet' : `No ${PHASE_LABELS[filter].toLowerCase()} photos yet`}</div>
@@ -302,10 +301,15 @@ export default function Gallery() {
           <Ring
             key={filter}
             items={items}
+            total={summary?.total ?? items.length}
             onPick={i => { setFanIdx(i); setMode('stack') }}
             onShare={() => setChoosingProject(true)}
           />
         )}
+        {isFetchingNextPage && <p role="status">Loading more…</p>}
+        {mode === 'stack' && hasNextPage && !isFetchingNextPage && <button className="chip" onClick={() => void fetchNextPage()}>
+          {isFetchNextPageError ? 'Retry' : 'Load more'}
+        </button>}
       </div>
       {choosingProject && createPortal(<div className="sheet-wrap open" id="gallery-project-picker" role="dialog" aria-modal="true" aria-label="Choose a project to share">
         <div className="backdrop" onClick={() => setChoosingProject(false)} />

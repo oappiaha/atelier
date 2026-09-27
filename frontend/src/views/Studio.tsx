@@ -55,11 +55,11 @@ export default function Studio() {
     enabled: !!designId,
   })
   usePanel([
-    { label: 'Studio hub', run: () => navigate(`/d/${designId}/studio`, { state: journey.state }) },
-    { label: 'Back to design', run: () => navigate(`/d/${designId}`, { state: journey.state }) },
+    { label: 'Studio', run: () => navigate(`/d/${designId}/studio`, { state: journey.state }) },
+    { label: 'Design', run: () => navigate(`/d/${designId}`, { state: journey.state }) },
     { label: 'More', children: [
-      { label: 'All studies', run: () => navigate('/studies') },
-      { label: 'Add to design', disabled: !design.data, run: useCapture.getState().openCapture },
+      { label: 'Studies', run: () => navigate('/studies') },
+      { label: 'Add', disabled: !design.data, run: useCapture.getState().openCapture },
     ] },
   ])
   const media = useQuery({

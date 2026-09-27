@@ -70,6 +70,7 @@ export const STATUS_CLASS: Record<DesignStatus, string> = {
 // ── API shapes (verified against the running backend, T1 evidence) ──────────
 
 export interface Project {
+  wordmark?: string | null
   id: string
   name: string
   kicker: string | null

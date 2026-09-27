@@ -9,15 +9,7 @@ import './styles/tactile.css'
 
 import App from './App'
 import Home from './views/Home'
-import Inbox from './views/Inbox'
-import Project from './views/Project'
-import Design from './views/Design'
-import Gallery from './views/Gallery'
-import Studies from './views/Studies'
-import Studio from './views/Studio'
-import StudioHub from './views/StudioHub'
 import Login from './views/Login'
-import PublicGallery from './views/PublicGallery'
 
 // staleTime 5 min: presigned image URLs in responses are now stable for days
 // (server-side memo), so refetches are cheap but still pointless every 30s —
@@ -33,18 +25,18 @@ const router = createBrowserRouter([
     element: <App />,
     children: [
       { index: true, element: <Home /> },
-      { path: 'inbox', element: <Inbox /> },
-      { path: 'p/:projectId', element: <Project /> },
-      { path: 'd/:designId', element: <Design /> },
-      { path: 'd/:designId/studio', element: <StudioHub /> },
-      { path: 'd/:designId/study/:studyId', element: <Studio /> },
-      { path: 'gallery', element: <Gallery /> },
-      { path: 'studies', element: <Studies /> },
+      { path: 'inbox', lazy: async () => ({ Component: (await import('./views/Inbox')).default }) },
+      { path: 'p/:projectId', lazy: async () => ({ Component: (await import('./views/Project')).default }) },
+      { path: 'd/:designId', lazy: async () => ({ Component: (await import('./views/Design')).default }) },
+      { path: 'd/:designId/studio', lazy: async () => ({ Component: (await import('./views/StudioHub')).default }) },
+      { path: 'd/:designId/study/:studyId', lazy: async () => ({ Component: (await import('./views/Studio')).default }) },
+      { path: 'gallery', lazy: async () => ({ Component: (await import('./views/Gallery')).default }) },
+      { path: 'studies', lazy: async () => ({ Component: (await import('./views/Studies')).default }) },
     ],
   },
   { path: '/login', element: <Login /> },
   // PUBLIC gallery: no auth, no app shell
-  { path: '/s/:slug', element: <PublicGallery /> },
+  { path: '/s/:slug', lazy: async () => ({ Component: (await import('./views/PublicGallery')).default }) },
 ])
 
 createRoot(document.getElementById('root')!).render(

@@ -711,3 +711,35 @@ textarea.field{min-height:84px;resize:none;}
   .hdr .dup-btn{padding:9px 12px;font-size:9px;}
   .hdr .gc-open{padding:8px 10px;}
 }
+
+/* Archive browsing: short controls, visual grid or compact named rows. */
+.browse-controls{margin:12px 0 16px;}
+.browse-controls .field{margin:0;}
+.browse-options{display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap;}
+.browse-options .seg button{display:flex;align-items:center;gap:6px;min-height:44px;}
+.browse-options select{min-height:44px;min-width:0;border:1px solid var(--stroke);border-radius:12px;padding:8px;background:var(--key-face);color:var(--ink);font:inherit;font-size:12px;}
+.browse-options>.chip{margin-left:auto;min-height:44px;}
+.dgrid.archive-list{display:flex;flex-direction:column;gap:8px;}
+.archive-list .dcard{display:flex;align-items:center;gap:12px;min-height:80px;padding:8px;text-align:left;}
+.archive-list .dcard .art{position:relative;width:64px;height:64px;min-height:64px;flex-shrink:0;border-radius:12px;overflow:hidden;aspect-ratio:1;}
+.archive-list .card-idx{position:static;background:none;box-shadow:none;color:var(--faint);padding:0;width:30px;flex-shrink:0;}
+.archive-list .dcard .label{position:static;background:none;color:var(--ink);padding:0;min-width:0;flex:1;}
+.archive-list .dname{white-space:normal;overflow-wrap:anywhere;}
+.archive-list .dcard-new{justify-content:center;}
+.archive-list .dcard-new .plus{font-size:24px;}
+.project-list{display:flex;flex-direction:column;}
+.project-list>.panel{width:100%;}
+
+.collection-header{padding:8px 0 4px;}
+.collection-title{font-size:clamp(22px,5vw,28px);font-weight:800;line-height:1.15;margin:0;overflow-wrap:anywhere;}
+.collection-wordmark{display:block;width:auto;height:auto;max-width:min(100%,360px);max-height:64px;object-fit:contain;object-position:left center;}
+.wordmark-help{font-size:12px;color:var(--fog);line-height:1.5;margin:12px 0;}
+.wordmark-preview{display:flex;align-items:center;min-height:90px;padding:12px;background:var(--bg);border-radius:14px;overflow-wrap:anywhere;}
+.wordmark-preview img{max-width:100%;max-height:64px;object-fit:contain;}
+.wordmark-upload{display:flex;flex-direction:column;gap:8px;margin-top:14px;font-size:12px;}
+.wordmark-upload input{width:100%;min-width:0;}
+.wordmark-actions{display:flex;gap:12px;margin-top:16px;}
+.wordmark-actions>*{flex:1;min-height:44px;}
+
+.timeline-image{display:block;width:100%;height:100%;object-fit:cover;transition:transform .8s var(--ease);}
+.tl-card:hover .tl-media>.timeline-image{transform:scale(1.05);}
