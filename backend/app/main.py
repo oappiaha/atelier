@@ -14,6 +14,7 @@ from app.routers import (
     colorways,
     designs,
     entries,
+    gallery,
     generation,
     media,
     palettes,
@@ -86,6 +87,7 @@ app.include_router(projects.router)
 app.include_router(designs.router)
 app.include_router(entries.router)
 app.include_router(media.router)
+app.include_router(gallery.router)
 app.include_router(palettes.router)
 app.include_router(regions.router)
 app.include_router(studies.router)
